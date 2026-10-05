@@ -114,6 +114,9 @@ MY_BYPASS_NE_INFER = HIJACK_REASONING_DIR / "my_bypass_ne_infer.jsonl"
 HIJACK_EN_PROMPT_NE_SHORT_PROBE_INFER = (
     HIJACK_REASONING_DIR / "hijack_reasoninig_en_prompt_ne_short_probe_infer.jsonl"
 )
+HIJACK_BYPASS_OUTPUT_PREFIX_INFER = (
+    HIJACK_REASONING_DIR / "hijack_reasoninig_bypass_output_prefix_infer.jsonl"
+)
 
 
 def load_records(path: Path) -> list[dict]:
