@@ -118,6 +118,24 @@ HIJACK_BYPASS_OUTPUT_PREFIX_INFER = (
     HIJACK_REASONING_DIR / "hijack_reasoninig_bypass_output_prefix_infer.jsonl"
 )
 
+HIJACK_DINKA_DIR = HIJACK_REASONING_DIR / "dinka"
+HIJACK_BYPASS_DEEPSEEKV3_DIN = (
+    HIJACK_DINKA_DIR / "hijack_reasoninig_bypass_deepseekv3_din.jsonl"
+)
+HIJACK_BYPASS_DEEPSEEKV3_DIN_INFER = (
+    HIJACK_DINKA_DIR / "hijack_reasoninig_bypass_deepseekv3_din_infer.jsonl"
+)
+HIJACK_DINKA_PROBE_DINKA = (
+    HIJACK_DINKA_DIR / "hijack_reasoning_bypass_deepseekv3-03_probe_dinka.jsonl"
+)
+HIJACK_DINKA_PROBE_DINKA_INFER = (
+    HIJACK_DINKA_DIR / "hijack_reasoning_bypass_deepseekv3-03_probe_dinka_infer.jsonl"
+)
+HIJACK_DINKA_PROBE_DINKA_INFER_EN = (
+    HIJACK_DINKA_DIR
+    / "hijack_reasoning_bypass_deepseekv3-03_probe_dinka_infer_en.jsonl"
+)
+
 
 def load_records(path: Path) -> list[dict]:
     text = path.read_text(encoding="utf-8").strip()
