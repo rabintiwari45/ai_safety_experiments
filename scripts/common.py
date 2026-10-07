@@ -21,6 +21,110 @@ INTERVENTIONS_DIR = PROJECT_ROOT / "interventions"
 
 MODEL_PATH = "Qwen/Qwen3-8B"
 
+_QWEN3_8B_SHARD_NAMES = tuple(
+    f"model-{i:05d}-of-00005.safetensors" for i in range(1, 6)
+)
+
+
+def _parse_env_line(line: str) -> tuple[str, str] | None:
+    line = line.strip()
+    if not line or line.startswith("#"):
+        return None
+    if line.startswith("export "):
+        line = line[len("export ") :].strip()
+    if "=" not in line:
+        return None
+    key, _, raw = line.partition("=")
+    key = key.strip()
+    val = raw.strip().strip('"').strip("'")
+    if not key:
+        return None
+    return key, val
+
+
+def load_workspace_env_file() -> None:
+    """Apply ${WORKSPACE}/.env; HF_* keys from the file override /etc/environment."""
+    workspace = Path(os.environ.get("WORKSPACE", "/workspace"))
+    env_path = workspace / ".env"
+    if not env_path.is_file():
+        return
+    hf_keys = frozenset({"HF_HOME", "HF_HUB_DISABLE_XET", "HF_TOKEN"})
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        parsed = _parse_env_line(line)
+        if parsed is None:
+            continue
+        key, val = parsed
+        if key in hf_keys:
+            os.environ[key] = val
+        else:
+            os.environ.setdefault(key, val)
+
+
+def _hf_snapshot_dir(hf_home: Path, model_id: str) -> Path | None:
+    repo = hf_home / "hub" / f"models--{model_id.replace('/', '--')}"
+    ref_main = repo / "refs" / "main"
+    if ref_main.is_file():
+        snap = repo / "snapshots" / ref_main.read_text(encoding="utf-8").strip()
+        if snap.is_dir():
+            return snap
+    snaps = repo / "snapshots"
+    if not snaps.is_dir():
+        return None
+    candidates = [p for p in snaps.iterdir() if p.is_dir()]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda p: p.stat().st_mtime)
+
+
+def hf_hub_cache_complete(hf_home: Path, model_id: str) -> bool:
+    snap = _hf_snapshot_dir(hf_home, model_id)
+    if snap is None:
+        return False
+    if model_id == MODEL_PATH:
+        return all(os.path.lexists(snap / name) for name in _QWEN3_8B_SHARD_NAMES)
+    index = snap / "model.safetensors.index.json"
+    if not index.is_file():
+        return (snap / "model.safetensors").is_file()
+    weight_map = json.loads(index.read_text(encoding="utf-8")).get("weight_map", {})
+    shard_names = {Path(v).name for v in weight_map.values()}
+    return bool(shard_names) and all(
+        os.path.lexists(snap / name) for name in shard_names
+    )
+
+
+def configure_model_hub_env(model_id: str = MODEL_PATH) -> str:
+    """
+    Load workspace .env and point HF_HOME at a complete local cache when possible.
+
+    Must run before importing transformers or sglang (they read HF_HOME at load time).
+    """
+    load_workspace_env_file()
+    os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+
+    workspace = Path(os.environ.get("WORKSPACE", "/workspace"))
+    candidates: list[Path] = []
+    seen: set[str] = set()
+
+    def add_candidate(path: Path) -> None:
+        key = str(path.resolve()) if path.exists() else str(path)
+        if key in seen:
+            return
+        seen.add(key)
+        candidates.append(path)
+
+    if os.environ.get("HF_HOME"):
+        add_candidate(Path(os.environ["HF_HOME"]))
+    add_candidate(Path("/root/.cache/huggingface"))
+    add_candidate(workspace / ".hf_home")
+
+    for hf_home in candidates:
+        if hf_hub_cache_complete(hf_home, model_id):
+            os.environ["HF_HOME"] = str(hf_home)
+            return str(hf_home)
+
+    return os.environ.get("HF_HOME", str(workspace / ".hf_home"))
+
+
 THINKING_SAMPLING_PARAMS = {
     "temperature": 0.6,
     "top_p": 0.95,
@@ -116,6 +220,9 @@ HIJACK_EN_PROMPT_NE_SHORT_PROBE_INFER = (
 )
 HIJACK_BYPASS_OUTPUT_PREFIX_INFER = (
     HIJACK_REASONING_DIR / "hijack_reasoninig_bypass_output_prefix_infer.jsonl"
+)
+HIJACK_PROMPT_ONLY_NO_THINK_INFER = (
+    HIJACK_REASONING_DIR / "hijack_reasoninig_prompt_only_no_think_infer.jsonl"
 )
 
 HIJACK_DINKA_DIR = HIJACK_REASONING_DIR / "dinka"
