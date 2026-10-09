@@ -24,6 +24,7 @@ from pathlib import Path
 from openai import BadRequestError, OpenAI
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "misc"))
 from common import (
     TRANSLATION_K1_NE_JSONL,
     TRANSLATION_K1_NE_OUTPUT_EN,

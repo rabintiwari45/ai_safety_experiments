@@ -6,8 +6,8 @@ Labels the model's final `output` field as yes (behavior exhibited) or no.
 
 Usage:
     export OPENAI_API_KEY="YOUR_API_KEY"
-    python scripts/classify_harmbench.py --input outputs/standard/harmbench_standard_qwen3_8b_k1_B-I1.jsonl
-    python scripts/classify_harmbench.py --input outputs/dynamic/harmbench_standard_qwen3_8b_dynamic.jsonl
+    python scripts/misc/classify_harmbench.py --input outputs/standard/harmbench_standard_qwen3_8b_k1_B-I1.jsonl
+    python scripts/misc/classify_harmbench.py --input outputs/dynamic/harmbench_standard_qwen3_8b_dynamic.jsonl
 """
 
 from __future__ import annotations

@@ -24,6 +24,7 @@ from openai import BadRequestError, OpenAI
 from transformers import AutoTokenizer
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "misc"))
 from common import (
     DYNAMIC_K2_JSONL,
     DYNAMIC_K2_PROBES,

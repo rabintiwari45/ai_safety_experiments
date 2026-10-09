@@ -22,6 +22,7 @@ from pathlib import Path
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPT_DIR.parent))
+sys.path.insert(0, str(_SCRIPT_DIR.parent / "misc"))
 sys.path.insert(0, str(_SCRIPT_DIR))
 from common import (
     HIJACK_REASONING_JSONL,

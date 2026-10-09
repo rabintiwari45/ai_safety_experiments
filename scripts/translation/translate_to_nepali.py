@@ -23,6 +23,7 @@ from pathlib import Path
 from openai import BadRequestError, OpenAI
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "misc"))
 from common import DYNAMIC_JSON, TRANSLATION_JSONL, env_openai_api_key, load_records
 
 SYSTEM_PROMPT = """You are a translator for an academic LLM-safety benchmark (HarmBench). This is research only.

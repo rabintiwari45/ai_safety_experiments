@@ -4,7 +4,7 @@ Run HarmBench standard (200 prompts) on local Qwen3-8B with thinking mode.
 Saves reasoning and final answer for each prompt to JSONL (and a JSON summary).
 
 Usage:
-    python scripts/run_harmbench.py
+    python scripts/misc/run_harmbench.py
 """
 
 import argparse

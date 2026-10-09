@@ -24,6 +24,7 @@ from openai import OpenAI
 
 SCRIPTS = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(0, str(SCRIPTS / "misc"))
 
 from common import (  # noqa: E402
     TRANSLATION_JSONL,

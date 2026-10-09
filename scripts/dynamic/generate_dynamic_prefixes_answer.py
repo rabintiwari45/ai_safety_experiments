@@ -23,6 +23,7 @@ from pathlib import Path
 from openai import BadRequestError, OpenAI
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "misc"))
 from common import BASELINE_JSON, DYNAMIC_PREFIXES_ANSWER, load_records
 
 DEFAULT_BASELINE = BASELINE_JSON

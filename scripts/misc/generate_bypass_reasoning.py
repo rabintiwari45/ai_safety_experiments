@@ -6,11 +6,11 @@ Reads original reasoning from a .txt file, calls GPT, writes the new reasoning
 to an output .txt file.
 
 Usage:
-    python scripts/generate_bypass_reasoning.py --input reasoning_original.txt
-    python scripts/generate_bypass_reasoning.py --input reasoning_original.txt --output reasoning_bypass.txt
-    python scripts/generate_bypass_reasoning.py --input reasoning_original.txt --prompt-file prompt.txt
-    python scripts/generate_bypass_reasoning.py --baseline outputs/standard/harmbench_standard_qwen3_8b.jsonl --limit 5
-    python scripts/generate_bypass_reasoning.py --dry-run --input reasoning_original.txt
+    python scripts/misc/generate_bypass_reasoning.py --input reasoning_original.txt
+    python scripts/misc/generate_bypass_reasoning.py --input reasoning_original.txt --output reasoning_bypass.txt
+    python scripts/misc/generate_bypass_reasoning.py --input reasoning_original.txt --prompt-file prompt.txt
+    python scripts/misc/generate_bypass_reasoning.py --baseline outputs/standard/harmbench_standard_qwen3_8b.jsonl --limit 5
+    python scripts/misc/generate_bypass_reasoning.py --dry-run --input reasoning_original.txt
 """
 
 from __future__ import annotations
@@ -25,11 +25,10 @@ from pathlib import Path
 from openai import BadRequestError, OpenAI
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import BASELINE_JSONL, load_records
+from common import BASELINE_JSONL, PROJECT_ROOT, load_records
 
 DEFAULT_BASELINE = BASELINE_JSONL
-DEFAULT_BATCH_OUTPUT = Path(__file__).resolve().parent.parent / "outputs" / "bypass_reasoning.jsonl"
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_BATCH_OUTPUT = PROJECT_ROOT / "outputs" / "bypass_reasoning.jsonl"
 DEFAULT_INPUT = PROJECT_ROOT / "prompts" / "reasoning_original.txt"
 DEFAULT_OUTPUT = PROJECT_ROOT / "prompts" / "reasoning_bypass.txt"
 

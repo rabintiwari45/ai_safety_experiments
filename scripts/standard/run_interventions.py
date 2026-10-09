@@ -23,6 +23,7 @@ import sglang as sgl
 from sglang.srt.parser.reasoning_parser import ReasoningParser
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "misc"))
 from common import (
     BASELINE_JSON,
     EXPERIMENT1,

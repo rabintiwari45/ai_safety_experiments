@@ -29,6 +29,7 @@ from openai import BadRequestError, OpenAI
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(SCRIPTS_DIR))
+sys.path.insert(0, str(SCRIPTS_DIR / "misc"))
 from common import (
     HIJACK_CLASSIFIER_MODEL,
     HIJACK_DINKA_PROBE_DINKA_INFER,

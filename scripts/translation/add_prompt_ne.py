@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "misc"))
 from common import (
     TRANSLATION_JSONL,
     TRANSLATION_OUTPUT_EN_CLASSIFIED_EN,

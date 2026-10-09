@@ -7,6 +7,7 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(0, str(SCRIPTS / "misc"))
 
 from common import TRANSLATION_RUN_JSONL  # noqa: E402
 import classify_harmbench as cls  # noqa: E402

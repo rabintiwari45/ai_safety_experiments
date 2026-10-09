@@ -33,6 +33,7 @@ from sglang.srt.parser.reasoning_parser import ReasoningParser
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(SCRIPTS_DIR))
+sys.path.insert(0, str(SCRIPTS_DIR / "misc"))
 from common import (
     BASELINE_JSON,
     HIJACK_DINKA_PROBE_DINKA,
@@ -343,7 +344,7 @@ def main() -> None:
     print(f"\nWrote {n_run} rows, skipped {n_skip} -> {output_path}")
     print(
         "Classify with:\n"
-        f"  python scripts/classify_harmbench.py --input {output_path}"
+        f"  python scripts/misc/classify_harmbench.py --input {output_path}"
     )
 
 

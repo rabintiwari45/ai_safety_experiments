@@ -18,6 +18,7 @@ from transformers import AutoTokenizer
 
 SCRIPTS = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(0, str(SCRIPTS / "misc"))
 sys.path.insert(0, str(SCRIPTS / "dynamic"))
 
 from common import (  # noqa: E402

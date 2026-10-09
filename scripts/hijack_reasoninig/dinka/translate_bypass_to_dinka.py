@@ -33,6 +33,7 @@ from openai import BadRequestError, OpenAI
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(SCRIPTS_DIR))
+sys.path.insert(0, str(SCRIPTS_DIR / "misc"))
 from common import (
     HIJACK_BYPASS_DEEPSEEKV3,
     HIJACK_BYPASS_DEEPSEEKV3_DIN,

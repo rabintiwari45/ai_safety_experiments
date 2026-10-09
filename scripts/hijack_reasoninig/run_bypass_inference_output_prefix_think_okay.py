@@ -27,6 +27,7 @@ from pathlib import Path
 
 _SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_SCRIPTS_DIR))
+sys.path.insert(0, str(_SCRIPTS_DIR / "misc"))
 from common import configure_model_hub_env
 
 configure_model_hub_env()
@@ -323,7 +324,7 @@ def main() -> None:
     print(f"\nWrote {n_run} rows, skipped {n_skip} -> {output_path}")
     print(
         "Classify with:\n"
-        f"  python scripts/classify_harmbench.py --input {output_path}"
+        f"  python scripts/misc/classify_harmbench.py --input {output_path}"
     )
 
 

@@ -5,8 +5,8 @@ Reads classifier_label (yes/no). Prints to stdout.
 Write a file only if --output is passed.
 
 Usage:
-    python scripts/summarize_classified.py --input outputs/standard/harmbench_standard_qwen3_8b_k1_B-I1_classified.jsonl
-    python scripts/summarize_classified.py --input outputs/dynamic/harmbench_standard_qwen3_8b_dynamic_classified.jsonl
+    python scripts/misc/summarize_classified.py --input outputs/standard/harmbench_standard_qwen3_8b_k1_B-I1_classified.jsonl
+    python scripts/misc/summarize_classified.py --input outputs/dynamic/harmbench_standard_qwen3_8b_dynamic_classified.jsonl
 """
 
 from __future__ import annotations

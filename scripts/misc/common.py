@@ -11,7 +11,7 @@ def env_openai_api_key() -> str:
     """OpenAI API key from OPENAI_API_KEY only (never read from source files)."""
     return os.environ.get("OPENAI_API_KEY", "")
 
-SCRIPTS_DIR = Path(__file__).resolve().parent
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = SCRIPTS_DIR.parent
 OUTPUT_DIR = PROJECT_ROOT / "outputs"
 STANDARD_DIR = OUTPUT_DIR / "standard"
