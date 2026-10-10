@@ -27,8 +27,9 @@ from transformers import AutoTokenizer
 import sglang as sgl
 from sglang.srt.parser.reasoning_parser import ReasoningParser
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "misc"))
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(SCRIPTS_DIR))
+sys.path.insert(0, str(SCRIPTS_DIR / "misc"))
 from common import (
     BASELINE_JSON,
     HIJACK_REASONING_JSONL,

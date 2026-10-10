@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import os
 from pathlib import Path
+from urllib.request import urlopen
 
 
 def env_openai_api_key() -> str:
@@ -242,6 +245,35 @@ HIJACK_DINKA_PROBE_DINKA_INFER_EN = (
     HIJACK_DINKA_DIR
     / "hijack_reasoning_bypass_deepseekv3-03_probe_dinka_infer_en.jsonl"
 )
+
+
+# walledai/HarmBench is gated on Hugging Face. Use the official public CSV.
+HARMBENCH_CSV_URL = (
+    "https://raw.githubusercontent.com/centerforaisafety/HarmBench/"
+    "main/data/behavior_datasets/harmbench_behaviors_text_all.csv"
+)
+
+
+def load_standard_behaviors() -> list[dict]:
+    """Download HarmBench text behaviors and keep FunctionalCategory=standard (200)."""
+    print(f"Downloading HarmBench behaviors from {HARMBENCH_CSV_URL} ...")
+    with urlopen(HARMBENCH_CSV_URL, timeout=60) as resp:
+        text = resp.read().decode("utf-8")
+    rows = []
+    for row in csv.DictReader(io.StringIO(text)):
+        if row["FunctionalCategory"].strip().lower() != "standard":
+            continue
+        rows.append(
+            {
+                "index": len(rows),
+                "prompt": row["Behavior"].strip(),
+                "category": row["SemanticCategory"].strip(),
+                "behavior_id": row["BehaviorID"].strip(),
+            }
+        )
+    if len(rows) != 200:
+        raise RuntimeError(f"Expected 200 standard prompts, got {len(rows)}")
+    return rows
 
 
 def load_records(path: Path) -> list[dict]:

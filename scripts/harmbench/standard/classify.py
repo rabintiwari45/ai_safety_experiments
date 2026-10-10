@@ -18,7 +18,7 @@ import os
 import sys
 from pathlib import Path
 
-SCRIPTS = Path(__file__).resolve().parent.parent
+SCRIPTS = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(SCRIPTS))
 sys.path.insert(0, str(SCRIPTS / "misc"))
 

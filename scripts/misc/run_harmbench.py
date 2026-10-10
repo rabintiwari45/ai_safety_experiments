@@ -8,12 +8,9 @@ Usage:
 """
 
 import argparse
-import csv
-import io
 import json
 import sys
 from pathlib import Path
-from urllib.request import urlopen
 
 from transformers import AutoTokenizer
 
@@ -26,15 +23,10 @@ from common import (
     MODEL_PATH,
     THINKING_SAMPLING_PARAMS,
     load_completed_ids,
+    load_standard_behaviors,
 )
 
 DEFAULT_OUTPUT = BASELINE_JSONL
-
-# walledai/HarmBench is gated on Hugging Face. Use the official public CSV.
-HARMBENCH_CSV_URL = (
-    "https://raw.githubusercontent.com/centerforaisafety/HarmBench/"
-    "main/data/behavior_datasets/harmbench_behaviors_text_all.csv"
-)
 
 
 def parse_args() -> argparse.Namespace:
@@ -60,26 +52,6 @@ def parse_args() -> argparse.Namespace:
         help="Optional cap on number of prompts (for a short test)",
     )
     return parser.parse_args()
-
-
-def load_standard_behaviors() -> list[dict]:
-    print(f"Downloading HarmBench behaviors from {HARMBENCH_CSV_URL} ...")
-    with urlopen(HARMBENCH_CSV_URL, timeout=60) as resp:
-        text = resp.read().decode("utf-8")
-    rows = []
-    for row in csv.DictReader(io.StringIO(text)):
-        if row["FunctionalCategory"].strip().lower() != "standard":
-            continue
-        rows.append(
-            {
-                "prompt": row["Behavior"].strip(),
-                "category": row["SemanticCategory"].strip(),
-                "behavior_id": row["BehaviorID"].strip(),
-            }
-        )
-    if len(rows) != 200:
-        raise RuntimeError(f"Expected 200 standard prompts, got {len(rows)}")
-    return rows
 
 
 def main() -> None:

@@ -29,8 +29,9 @@ from pathlib import Path
 
 from openai import BadRequestError, OpenAI
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "misc"))
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(SCRIPTS_DIR))
+sys.path.insert(0, str(SCRIPTS_DIR / "misc"))
 from common import (
     HIJACK_REASONING_BYPASS_V2,
     HIJACK_REASONING_JSONL,
