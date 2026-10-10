@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", default=str(DEFAULT_INPUT))
     parser.add_argument("--baseline", default=str(DEFAULT_BASELINE))
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
-    parser.add_argument("--max-new-tokens", type=int, default=4048)
+    parser.add_argument("--max-new-tokens", type=int, default=8048)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument(
         "--dry-run",

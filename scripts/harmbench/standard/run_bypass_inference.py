@@ -10,10 +10,13 @@ continues thinking and writes the final answer.
 Output JSONL keeps original_reasoning, bypass_reasoning, new_reasoning
 (model continuation in thinking), full reasoning, and output.
 
-Usage (from harmbench/):
-    python scripts/hijack_reasoninig/run_bypass_inference.py --dry-run
-    python scripts/hijack_reasoninig/run_bypass_inference.py --limit 1
-    python scripts/hijack_reasoninig/run_bypass_inference.py
+Resume: rows already in --output with a non-empty "output" field are skipped.
+Rows missing from --output, or present with an empty/missing "output" value,
+are (re)run. --limit applies to those pending rows only.
+
+Usage (from ai_safety_experiments/):
+    python scripts/harmbench/standard/run_bypass_inference.py --dry-run --limit 1
+    python scripts/harmbench/standard/run_bypass_inference.py --input ... --output ...
 """
 
 from __future__ import annotations
@@ -57,8 +60,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", default=str(DEFAULT_INPUT))
     parser.add_argument("--baseline", default=str(DEFAULT_BASELINE))
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
-    parser.add_argument("--max-new-tokens", type=int, default=4048)
-    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--max-new-tokens", type=int, default=8048)
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Max pending rows to run (missing or empty output), not the first N input rows",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -133,8 +141,6 @@ def main() -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     records = load_records(input_path)
-    if args.limit is not None:
-        records = records[: min(args.limit, len(records))]
 
     k0_by_index: dict[int, str] = {}
     baseline_path = Path(args.baseline)
@@ -157,7 +163,7 @@ def main() -> None:
             f"{sorted(empty_output)}"
         )
 
-    pending: list[dict] = []
+    candidates: list[dict] = []
     n_skip = 0
     for row in records:
         idx = row["index"]
@@ -167,36 +173,43 @@ def main() -> None:
 
         if idx in completed:
             print(f"[{idx}] skip: non-empty output already in {output_path}", flush=True)
+            n_skip += 1
+            continue
+        if not bypass:
+            print(f"[{idx}] skip: empty bypass_reasoning", flush=True)
+            n_skip += 1
             continue
         if idx in empty_output:
             print(
                 f"[{idx}] re-run: row exists in output but output is empty",
                 flush=True,
             )
-        if not bypass:
-            print(f"[{idx}] skip: empty bypass_reasoning", flush=True)
-            n_skip += 1
-            continue
-
-        continue_prompt = build_continue_prompt(tokenizer, row["prompt"], bypass)
-        print(f"\n[{idx}] {row.get('behavior_id', '')}  preparing model input", flush=True)
-        log_banner("USER PROMPT")
-        print(row["prompt"], flush=True)
-        log_banner("BYPASS (raw from file)")
-        print(bypass_raw, flush=True)
-        log_banner("BYPASS IN <think> (augmented, </think> not closed)")
-        print(bypass, flush=True)
-        print_full_prompt(continue_prompt, tokenizer)
-
-        pending.append(
+        candidates.append(
             {
                 "row": row,
                 "bypass_raw": bypass_raw,
                 "bypass": bypass,
                 "original_reasoning": original_reasoning,
-                "continue_prompt": continue_prompt,
             }
         )
+
+    if args.limit is not None:
+        candidates = candidates[: min(args.limit, len(candidates))]
+
+    pending: list[dict] = []
+    for item in candidates:
+        row = item["row"]
+        idx = row["index"]
+        continue_prompt = build_continue_prompt(tokenizer, row["prompt"], item["bypass"])
+        print(f"\n[{idx}] {row.get('behavior_id', '')}  preparing model input", flush=True)
+        log_banner("USER PROMPT")
+        print(row["prompt"], flush=True)
+        log_banner("BYPASS (raw from file)")
+        print(item["bypass_raw"], flush=True)
+        log_banner("BYPASS IN <think> (augmented, </think> not closed)")
+        print(item["bypass"], flush=True)
+        print_full_prompt(continue_prompt, tokenizer)
+        pending.append({**item, "continue_prompt": continue_prompt})
 
     if args.dry_run:
         print(f"\nDry-run: {len(pending)} prompt(s) printed; not loading the GPU")
