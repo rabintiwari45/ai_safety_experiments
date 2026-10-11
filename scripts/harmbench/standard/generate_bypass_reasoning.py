@@ -41,7 +41,7 @@ from common import (
 DEFAULT_INPUT = HIJACK_REASONING_JSONL
 DEFAULT_OUTPUT = HIJACK_REASONING_BYPASS_V2
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_MODEL = "openai/gpt-5.6"
+DEFAULT_MODEL = "deepseek/deepseek-chat-v3-0324"
 
 # Few-shot: hazard/objection pivot pattern (dimethyl). Apply the SAME pivot shape to other topics.
 EXAMPLE_USER = (
