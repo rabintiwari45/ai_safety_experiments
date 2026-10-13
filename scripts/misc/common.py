@@ -19,6 +19,9 @@ PROJECT_ROOT = SCRIPTS_DIR.parent
 OUTPUT_DIR = PROJECT_ROOT / "outputs"
 STANDARD_DIR = OUTPUT_DIR / "standard"
 DYNAMIC_DIR = OUTPUT_DIR / "dynamic"
+HARMBENCH_DIR = OUTPUT_DIR / "harmbench"
+HARMBENCH_STANDARD_DIR = HARMBENCH_DIR / "standard"
+HARMBENCH_CONTEXTUAL_DIR = HARMBENCH_DIR / "contextual"
 HIJACK_REASONING_DIR = OUTPUT_DIR / "hijack_reasoninig"
 INTERVENTIONS_DIR = PROJECT_ROOT / "interventions"
 
@@ -252,15 +255,32 @@ HARMBENCH_CSV_URL = (
     "https://raw.githubusercontent.com/centerforaisafety/HarmBench/"
     "main/data/behavior_datasets/harmbench_behaviors_text_all.csv"
 )
+CONTEXTUAL_BEHAVIORS_JSONL = (
+    HARMBENCH_CONTEXTUAL_DIR / "harmbench_contextual_behaviors.jsonl"
+)
+CONTEXTUAL_PROBES = HARMBENCH_CONTEXTUAL_DIR / "probes.jsonl"
+
+
+def make_direct_request_user_prompt(context: str, behavior: str) -> str:
+    """HarmBench DirectRequest / GCG contextual test case."""
+    context = (context or "").strip()
+    behavior = (behavior or "").strip()
+    if context:
+        return f"{context}\n\n---\n\n{behavior}"
+    return behavior
+
+
+def _download_harmbench_csv_rows() -> list[dict]:
+    print(f"Downloading HarmBench behaviors from {HARMBENCH_CSV_URL} ...")
+    with urlopen(HARMBENCH_CSV_URL, timeout=60) as resp:
+        text = resp.read().decode("utf-8")
+    return list(csv.DictReader(io.StringIO(text)))
 
 
 def load_standard_behaviors() -> list[dict]:
     """Download HarmBench text behaviors and keep FunctionalCategory=standard (200)."""
-    print(f"Downloading HarmBench behaviors from {HARMBENCH_CSV_URL} ...")
-    with urlopen(HARMBENCH_CSV_URL, timeout=60) as resp:
-        text = resp.read().decode("utf-8")
     rows = []
-    for row in csv.DictReader(io.StringIO(text)):
+    for row in _download_harmbench_csv_rows():
         if row["FunctionalCategory"].strip().lower() != "standard":
             continue
         rows.append(
@@ -273,6 +293,34 @@ def load_standard_behaviors() -> list[dict]:
         )
     if len(rows) != 200:
         raise RuntimeError(f"Expected 200 standard prompts, got {len(rows)}")
+    return rows
+
+
+def load_contextual_behaviors() -> list[dict]:
+    """Download HarmBench text behaviors and keep FunctionalCategory=contextual (100)."""
+    rows = []
+    for row in _download_harmbench_csv_rows():
+        if row["FunctionalCategory"].strip().lower() != "contextual":
+            continue
+        behavior = row["Behavior"].strip()
+        context = (row.get("ContextString") or "").strip()
+        if not context:
+            raise RuntimeError(
+                f"Contextual row {row.get('BehaviorID', '')!r} has empty ContextString"
+            )
+        rows.append(
+            {
+                "index": len(rows),
+                "prompt": behavior,
+                "context": context,
+                "user_prompt": make_direct_request_user_prompt(context, behavior),
+                "category": row["SemanticCategory"].strip(),
+                "behavior_id": row["BehaviorID"].strip(),
+                "tags": (row.get("Tags") or "").strip(),
+            }
+        )
+    if len(rows) != 100:
+        raise RuntimeError(f"Expected 100 contextual prompts, got {len(rows)}")
     return rows
 
 
