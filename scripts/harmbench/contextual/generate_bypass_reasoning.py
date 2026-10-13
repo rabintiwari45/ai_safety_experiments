@@ -186,7 +186,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--print-prompt",
         action="store_true",
-        help="Print the full chat messages sent to the model for each row (and retries)",
+        help="Print only the rewrite user prompt sent to the model (skip system/few-shot turns)",
     )
     return parser.parse_args()
 
@@ -384,6 +384,14 @@ def build_retry_messages(
     return messages
 
 
+def rewrite_user_prompt(messages: list[dict]) -> str:
+    """Last user message is the actual rewrite task; earlier user turns are few-shot."""
+    user_msgs = [m for m in messages if m.get("role") == "user"]
+    if not user_msgs:
+        return ""
+    return user_msgs[-1].get("content") or ""
+
+
 def log_messages_to_stdout(
     *,
     index: int | None,
@@ -391,6 +399,7 @@ def log_messages_to_stdout(
     messages: list[dict],
     title: str,
 ) -> None:
+    content = rewrite_user_prompt(messages)
     header = f"\n{'=' * 20} {title} "
     if index is not None:
         header += f"[index={index}"
@@ -399,11 +408,7 @@ def log_messages_to_stdout(
         header += "] "
     header += "=" * 20
     print(header, flush=True)
-    for turn_i, msg in enumerate(messages, start=1):
-        role = msg.get("role", "?")
-        content = msg.get("content") or ""
-        print(f"\n--- turn {turn_i} role={role} ({len(content)} chars) ---", flush=True)
-        print(content, flush=True)
+    print(content, flush=True)
     print(f"{'=' * 20} END {title} {'=' * 20}\n", flush=True)
 
 
@@ -501,7 +506,7 @@ def rewrite_reasoning(
             index=log_index,
             behavior_id=log_behavior_id,
             messages=initial_messages,
-            title="MODEL PROMPT (initial)",
+            title="REWRITE USER PROMPT",
         )
     result = call_rewrite(client, model, initial_messages)
     bypass = result.get("bypass_reasoning") or ""
@@ -523,7 +528,7 @@ def rewrite_reasoning(
                 index=log_index,
                 behavior_id=log_behavior_id,
                 messages=retry_messages,
-                title=f"MODEL PROMPT (retry: {issue})",
+                title=f"REWRITE USER PROMPT (retry: {issue})",
             )
         retry = call_rewrite(client, model, retry_messages)
         retry_bypass = retry.get("bypass_reasoning") or ""
@@ -578,11 +583,6 @@ def main() -> None:
             reasoning = merge_probe_and_reasoning(probe, raw_reasoning)
         else:
             reasoning = strip_thinking_tags(raw_reasoning)
-        print(f"Input:  {input_path}")
-        print(f"Output: {output_path}")
-        print(f"Reasoning field: {args.reasoning_field}")
-        print("--- DirectRequest user_prompt ---", flush=True)
-        print(user_prompt, flush=True)
         log_messages_to_stdout(
             index=row0.get("index"),
             behavior_id=row0.get("behavior_id", ""),
@@ -595,7 +595,7 @@ def main() -> None:
                 probe=probe,
                 reasoning_field=args.reasoning_field,
             ),
-            title="MODEL PROMPT (dry-run)",
+            title="REWRITE USER PROMPT",
         )
         print(f"Would process {len(records)} rows via {args.base_url} model={args.model}")
         return

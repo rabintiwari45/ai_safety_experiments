@@ -153,7 +153,14 @@ def main() -> None:
             n_skip += 1
             continue
         continue_prompt = build_continue_prompt(tokenizer, user_prompt, probe)
-        print_model_prompt(idx, continue_prompt, tokenizer)
+        if args.dry_run or args.print_prompt:
+            print_model_prompt(idx, continue_prompt, tokenizer)
+        else:
+            n_toks = count_tokens(tokenizer, continue_prompt)
+            print(
+                f"[{idx}] {row.get('behavior_id', '')} queued ({n_toks} tokens)",
+                flush=True,
+            )
         pending.append(
             {
                 "row": row,
