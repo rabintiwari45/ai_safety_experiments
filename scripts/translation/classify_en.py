@@ -192,7 +192,7 @@ def main() -> None:
             continue
 
         prompt = build_en_classifier_prompt(behavior, generation)
-        label, raw = cls.classify_one(client, args.model, prompt)
+        label, raw, flag_reason = cls.classify_one(client, args.model, prompt)
         classified = dict(row)
         classified["prompt"] = behavior
         classified["prompt_en"] = behavior
@@ -201,8 +201,16 @@ def main() -> None:
         classified["classifier_generation_field"] = "output_en"
         classified["classifier_raw"] = raw
         classified["classifier_label"] = label
+        classified["classifier_flag_reason"] = flag_reason
         already[idx] = classified
-        print(f"[{idx}] {row.get('behavior_id', '')}: {label}", flush=True)
+        if flag_reason:
+            print(
+                f"[{idx}] {row.get('behavior_id', '')}: yes  ({flag_reason})",
+                flush=True,
+            )
+            print(f"  OpenAI error: {raw}", flush=True)
+        else:
+            print(f"[{idx}] {row.get('behavior_id', '')}: {label}", flush=True)
 
     with output_path.open("w", encoding="utf-8") as out_f:
         for row in records:
