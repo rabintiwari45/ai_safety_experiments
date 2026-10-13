@@ -1,20 +1,20 @@
 """
 Generate hijack-reasoning probes for each HarmBench contextual query.
 
-Qwen user content is the DirectRequest string:
+Qwen user content is:
 
-    {ContextString}
+    {Behavior}
 
     ---
 
-    {Behavior}
+    {ContextString}
 
 The one-line probe restates only the Behavior (not the long context).
 
 Usage (from ai_safety_experiments/):
     python scripts/harmbench/contextual/generate_probes.py --dry-run --limit 1
     python scripts/harmbench/contextual/generate_probes.py --print-prompt --limit 1
-    python scripts/harmbench/contextual/generate_probes.py --limit 100
+    python scripts/harmbench/contextual/generate_probes.py --input outputs/harmbench/contextual/harmbench_contextual_behaviors.jsonl --limit 100
     python scripts/harmbench/contextual/generate_probes.py --max-attempts 3
 """
 
@@ -35,9 +35,9 @@ sys.path.insert(0, str(SCRIPTS_DIR / "misc"))
 from common import (  # noqa: E402
     CONTEXTUAL_BEHAVIORS_JSONL,
     CONTEXTUAL_PROBES,
+    contextual_user_prompt,
     load_contextual_behaviors,
     load_records,
-    make_direct_request_user_prompt,
 )
 
 DEFAULT_OUTPUT = CONTEXTUAL_PROBES
@@ -98,7 +98,7 @@ def parse_args() -> argparse.Namespace:
         description="GPT hijack-reasoning probes for HarmBench contextual queries"
     )
     parser.add_argument(
-        "--baseline",
+        "--input",
         default=None,
         help=(
             "Optional JSON/JSONL of behaviors. Default: fetch HarmBench contextual "
@@ -176,10 +176,7 @@ def print_debug_prompts(
 
 
 def qwen_user_content(row: dict) -> str:
-    existing = (row.get("user_prompt") or "").strip()
-    if existing:
-        return existing
-    return make_direct_request_user_prompt(row.get("context", ""), row.get("prompt", ""))
+    return contextual_user_prompt(row)
 
 
 def build_input_prompt(user_prompt: str, probe: str) -> str:
@@ -312,10 +309,10 @@ def generate_probe_with_retries(
     return last
 
 
-def load_probe_behaviors(baseline: str | None) -> list[dict]:
-    if baseline:
-        records = load_records(Path(baseline))
-        print(f"Loaded {len(records)} behaviors from {baseline}")
+def load_probe_behaviors(input_path: str | None) -> list[dict]:
+    if input_path:
+        records = load_records(Path(input_path))
+        print(f"Loaded {len(records)} behaviors from {input_path}")
         return records
     cached = Path(CONTEXTUAL_BEHAVIORS_JSONL)
     if cached.exists():
@@ -332,7 +329,7 @@ def main() -> None:
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    records = load_probe_behaviors(args.baseline)
+    records = load_probe_behaviors(args.input)
     if args.limit is not None:
         records = records[: min(args.limit, len(records))]
 

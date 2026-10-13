@@ -111,6 +111,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional cap on number of rows",
     )
+    parser.add_argument(
+        "--print-prompt",
+        action="store_true",
+        help="Print the HarmBench classifier prompt for each row",
+    )
     return parser.parse_args()
 
 
@@ -200,6 +205,15 @@ def main() -> None:
             continue
 
         prompt = build_classifier_prompt(row, args.generation_field)
+        if args.print_prompt:
+            print("=" * 80, flush=True)
+            print(
+                f"[{idx}] {row.get('behavior_id', '')} classifier prompt "
+                f"({'contextual' if row.get('context') else 'standard'})",
+                flush=True,
+            )
+            print(prompt, flush=True)
+            print("=" * 80, flush=True)
         label, raw = classify_one(client, args.model, prompt)
         classified = dict(row)
         classified["classifier_model"] = args.model

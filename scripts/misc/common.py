@@ -259,15 +259,32 @@ CONTEXTUAL_BEHAVIORS_JSONL = (
     HARMBENCH_CONTEXTUAL_DIR / "harmbench_contextual_behaviors.jsonl"
 )
 CONTEXTUAL_PROBES = HARMBENCH_CONTEXTUAL_DIR / "probes.jsonl"
+CONTEXTUAL_PROBE_INFER = HARMBENCH_CONTEXTUAL_DIR / "probe_infer.jsonl"
+CONTEXTUAL_BYPASS = HARMBENCH_CONTEXTUAL_DIR / "bypass_reasoning.jsonl"
+CONTEXTUAL_BYPASS_INFER = HARMBENCH_CONTEXTUAL_DIR / "bypass_infer.jsonl"
+CONTEXTUAL_BYPASS_OUTPUT_PREFIX_INFER = (
+    HARMBENCH_CONTEXTUAL_DIR / "bypass_output_prefix_infer.jsonl"
+)
+CONTEXTUAL_BYPASS_INFER_CLASSIFIED = (
+    HARMBENCH_CONTEXTUAL_DIR / "bypass_infer_classified.jsonl"
+)
+CONTEXTUAL_BYPASS_OUTPUT_PREFIX_INFER_CLASSIFIED = (
+    HARMBENCH_CONTEXTUAL_DIR / "bypass_output_prefix_infer_classified.jsonl"
+)
 
 
 def make_direct_request_user_prompt(context: str, behavior: str) -> str:
-    """HarmBench DirectRequest / GCG contextual test case."""
+    """Qwen user message: Behavior first, then the context passage."""
     context = (context or "").strip()
     behavior = (behavior or "").strip()
-    if context:
-        return f"{context}\n\n---\n\n{behavior}"
-    return behavior
+    if behavior and context:
+        return f"{behavior}\n\n---\n\n{context}"
+    return behavior or context
+
+
+def contextual_user_prompt(row: dict) -> str:
+    """Always rebuild from prompt + context so field order cannot go stale."""
+    return make_direct_request_user_prompt(row.get("context", ""), row.get("prompt", ""))
 
 
 def _download_harmbench_csv_rows() -> list[dict]:

@@ -1,18 +1,18 @@
 """
 Fetch the 100 HarmBench contextual behaviors and write JSONL.
 
-Each row uses DirectRequest formatting for the Qwen user message:
+Each row uses this formatting for the Qwen user message:
 
-    {ContextString}
+    {Behavior}
 
     ---
 
-    {Behavior}
+    {ContextString}
 
 Fields:
     prompt       = Behavior (classifier behavior string)
     context      = ContextString
-    user_prompt  = context + "\\n\\n---\\n\\n" + behavior
+    user_prompt  = behavior + "\\n\\n---\\n\\n" + context
 
 Usage (from ai_safety_experiments/):
     python scripts/harmbench/contextual/fetch_behaviors.py
