@@ -60,8 +60,16 @@ def parse_args() -> argparse.Namespace:
         default="bypass_reasoning",
         help="JSONL field for the prefix text (e.g. bypass_reasoning_ne)",
     )
-    parser.add_argument("--max-new-tokens", type=int, default=4048)
-    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--max-new-tokens", type=int, default=8048)
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help=(
+            "Max rows to run this pass. Empty-output / empty-continuation rows "
+            "in --output are retried first, then indices missing from --output"
+        ),
+    )
     parser.add_argument(
         "--no-augment",
         action="store_true",
@@ -118,6 +126,17 @@ def log_banner(title: str) -> None:
     print(f"\n{'=' * 12} {title} {'=' * 12}", flush=True)
 
 
+def load_output_prefix_resume_state(output_path: Path) -> tuple[set[int], set[int]]:
+    """Retry if `output` is empty or the generated continuation never arrived."""
+    completed_out, empty_out = load_infer_resume_state(output_path, "output")
+    completed_suf, empty_suf = load_infer_resume_state(
+        output_path, "new_output_suffix"
+    )
+    in_file = completed_out | empty_out | completed_suf | empty_suf
+    empty = empty_out | empty_suf
+    return in_file - empty, empty
+
+
 def print_full_prompt(continue_prompt: str, tokenizer) -> None:
     n_toks = count_tokens(tokenizer, continue_prompt)
     print(
@@ -142,13 +161,11 @@ def main() -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     records = load_records(input_path)
-    if args.limit is not None:
-        records = records[: min(args.limit, len(records))]
 
     print(f"Loading tokenizer from {args.model_path} ...")
     tokenizer = AutoTokenizer.from_pretrained(args.model_path)
 
-    completed, empty_output = load_infer_resume_state(output_path)
+    completed, empty_output = load_output_prefix_resume_state(output_path)
     if completed:
         print(
             f"Resume: skipping {len(completed)} index(es) with non-empty output "
@@ -156,8 +173,8 @@ def main() -> None:
         )
     if empty_output:
         print(
-            f"Resume: will re-run {len(empty_output)} index(es) with empty output: "
-            f"{sorted(empty_output)}"
+            f"Resume: will re-run {len(empty_output)} index(es) with empty "
+            f"output/continuation: {sorted(empty_output)}"
         )
 
     print(
@@ -166,7 +183,8 @@ def main() -> None:
         flush=True,
     )
 
-    pending: list[dict] = []
+    retries: list[dict] = []
+    fresh: list[dict] = []
     n_skip = 0
     for row in records:
         idx = row["index"]
@@ -177,12 +195,8 @@ def main() -> None:
 
         if idx in completed:
             print(f"[{idx}] skip: non-empty output already in {output_path}", flush=True)
+            n_skip += 1
             continue
-        if idx in empty_output:
-            print(
-                f"[{idx}] re-run: row exists in output but output is empty",
-                flush=True,
-            )
         if not user_prompt:
             print(f"[{idx}] skip: empty user_prompt", flush=True)
             n_skip += 1
@@ -191,35 +205,69 @@ def main() -> None:
             print(f"[{idx}] skip: empty {args.bypass_field}", flush=True)
             n_skip += 1
             continue
+        item = {
+            "row": row,
+            "user_prompt": user_prompt,
+            "bypass_raw": bypass_raw,
+            "bypass": bypass,
+            "original_reasoning": original_reasoning,
+            "retry_empty_output": idx in empty_output,
+        }
+        if idx in empty_output:
+            print(
+                f"[{idx}] re-run: output/continuation is empty in {output_path}",
+                flush=True,
+            )
+            retries.append(item)
+        else:
+            fresh.append(item)
 
-        continue_prompt = build_output_prefix_prompt(tokenizer, user_prompt, bypass)
+    candidates = retries + fresh
+    if args.limit is not None:
+        candidates = candidates[: min(args.limit, len(candidates))]
+    n_retry = sum(1 for item in candidates if item["retry_empty_output"])
+    if n_retry:
         print(
-            f"\n[{idx}] {row.get('behavior_id', '')}  preparing model input",
+            f"This pass: {n_retry} empty-output re-run(s), "
+            f"{len(candidates) - n_retry} new index(es)",
             flush=True,
         )
-        if not args.print_prompt_only:
-            log_banner("BEHAVIOR (prompt)")
-            print(row.get("prompt", ""), flush=True)
-            log_banner("CONTEXT")
-            print(row.get("context", "") or "(empty)", flush=True)
-            log_banner("USER PROMPT (DirectRequest)")
-            print(user_prompt, flush=True)
-            log_banner(f"BYPASS PREFIX ({args.bypass_field}, raw)")
-            print(bypass_raw, flush=True)
-            log_banner("BYPASS PREFIX (assistant output, after augment)")
-            print(bypass, flush=True)
-        print_full_prompt(continue_prompt, tokenizer)
 
-        pending.append(
-            {
-                "row": row,
-                "user_prompt": user_prompt,
-                "bypass_raw": bypass_raw,
-                "bypass": bypass,
-                "original_reasoning": original_reasoning,
-                "continue_prompt": continue_prompt,
-            }
+    pending: list[dict] = []
+    for item in candidates:
+        row = item["row"]
+        idx = row["index"]
+        user_prompt = item["user_prompt"]
+        continue_prompt = build_output_prefix_prompt(
+            tokenizer, user_prompt, item["bypass"]
         )
+        n_toks = count_tokens(tokenizer, continue_prompt)
+        if args.dry_run or args.print_prompt:
+            kind = "re-run empty output" if item["retry_empty_output"] else "new"
+            print(
+                f"\n[{idx}] {row.get('behavior_id', '')}  {kind}  "
+                f"preparing model input",
+                flush=True,
+            )
+            if not args.print_prompt_only:
+                log_banner("BEHAVIOR (prompt)")
+                print(row.get("prompt", ""), flush=True)
+                log_banner("CONTEXT")
+                print(row.get("context", "") or "(empty)", flush=True)
+                log_banner("USER PROMPT (DirectRequest)")
+                print(user_prompt, flush=True)
+                log_banner(f"BYPASS PREFIX ({args.bypass_field}, raw)")
+                print(item["bypass_raw"], flush=True)
+                log_banner("BYPASS PREFIX (assistant output, after augment)")
+                print(item["bypass"], flush=True)
+            print_full_prompt(continue_prompt, tokenizer)
+        else:
+            kind = "re-run empty output" if item["retry_empty_output"] else "queued"
+            print(
+                f"[{idx}] {row.get('behavior_id', '')} {kind} ({n_toks} tokens)",
+                flush=True,
+            )
+        pending.append({**item, "continue_prompt": continue_prompt})
 
     if args.dry_run:
         label = "Print-prompt" if args.print_prompt else "Dry-run"
@@ -252,11 +300,12 @@ def main() -> None:
             continue_prompt = item["continue_prompt"]
             idx = row["index"]
 
-            print(
-                f"\n[{idx}] sending the prompt below to the model ...",
-                flush=True,
+            kind = (
+                "re-run empty output"
+                if item.get("retry_empty_output")
+                else "generate"
             )
-            print_full_prompt(continue_prompt, tokenizer)
+            print(f"\n[{idx}] {kind} ...", flush=True)
             generated = llm.generate(
                 prompt=continue_prompt, sampling_params=sampling_params
             )
@@ -306,7 +355,14 @@ def main() -> None:
             print(new_output_suffix or "(empty)", flush=True)
             log_banner("FULL OUTPUT (prefix + continuation)")
             print(output or "(empty)", flush=True)
-            print(f"[{idx}] {row.get('behavior_id', '')} done", flush=True)
+            if not new_output_suffix.strip():
+                print(
+                    f"[{idx}] {row.get('behavior_id', '')} still has empty "
+                    "continuation (will retry on the next run)",
+                    flush=True,
+                )
+            else:
+                print(f"[{idx}] {row.get('behavior_id', '')} done", flush=True)
     finally:
         llm.shutdown()
 
