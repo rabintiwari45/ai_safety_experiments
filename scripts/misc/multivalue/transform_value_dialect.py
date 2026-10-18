@@ -43,6 +43,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--list-dialects", action="store_true")
+    parser.add_argument(
+        "--split-paragraphs",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Transform each paragraph separately (default: on)",
+    )
     return parser.parse_args()
 
 
@@ -76,6 +82,7 @@ def main() -> None:
         limit=args.limit,
         overwrite=args.overwrite,
         dry_run=args.dry_run,
+        split_paragraphs=args.split_paragraphs,
     )
 
 

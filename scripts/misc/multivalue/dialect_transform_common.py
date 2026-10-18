@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Type
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import HARMBENCH_STANDARD_DIR, load_records
+from multivalue_compat import apply_multivalue_compat_patches, transform_text
 
 DEFAULT_INPUT = HARMBENCH_STANDARD_DIR / "bypass_reasoning_deepseekv3-03.jsonl"
 
@@ -98,9 +100,12 @@ def run_transform(
     limit: int | None,
     overwrite: bool,
     dry_run: bool,
+    split_paragraphs: bool = True,
 ) -> None:
     if not input_path.is_file():
         raise SystemExit(f"Input not found: {input_path}")
+
+    apply_multivalue_compat_patches()
 
     rows = load_records(input_path)
     if limit is not None:
@@ -123,7 +128,9 @@ def run_transform(
         print("--- before (first 400 chars) ---")
         print(text[:400])
         dialect = dialect_cls()
-        out = dialect.transform(text)
+        out = transform_text(
+            dialect, text, split_paragraphs=split_paragraphs
+        )
         print("--- after (first 400 chars) ---")
         print(out[:400])
         return
@@ -160,7 +167,11 @@ def run_transform(
                 record["value_dialect"] = dialect_class_name
             else:
                 try:
-                    record[output_key] = dialect.transform(raw)
+                    record[output_key] = transform_text(
+                        dialect,
+                        raw,
+                        split_paragraphs=split_paragraphs,
+                    )
                     record["value_dialect"] = dialect_class_name
                 except Exception as exc:  # noqa: BLE001 — keep batch running
                     record[output_key] = ""
@@ -192,6 +203,12 @@ def build_preset_parser(
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--split-paragraphs",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Transform each paragraph separately (default: on; helps long traces)",
+    )
     return parser
 
 
@@ -219,4 +236,5 @@ def main_preset(
         limit=args.limit,
         overwrite=args.overwrite,
         dry_run=args.dry_run,
+        split_paragraphs=args.split_paragraphs,
     )
