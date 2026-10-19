@@ -22,6 +22,15 @@ DYNAMIC_DIR = OUTPUT_DIR / "dynamic"
 HARMBENCH_DIR = OUTPUT_DIR / "harmbench"
 HARMBENCH_STANDARD_DIR = HARMBENCH_DIR / "standard"
 HARMBENCH_CONTEXTUAL_DIR = HARMBENCH_DIR / "contextual"
+HARMBENCH_MULTIVALUE_STANDARD_DIR = HARMBENCH_DIR / "multivalue_standard"
+MULTIVALUE_STANDARD_BYPASS_COLLOQUIAL_SG = (
+    HARMBENCH_MULTIVALUE_STANDARD_DIR
+    / "bypass_reasoning_deepseekv3-03_colloquial_singapore.jsonl"
+)
+MULTIVALUE_STANDARD_BYPASS_COLLOQUIAL_SG_INFER = (
+    HARMBENCH_MULTIVALUE_STANDARD_DIR
+    / "bypass_reasoning_deepseekv3-03_colloquial_singapore_infer.jsonl"
+)
 HIJACK_REASONING_DIR = OUTPUT_DIR / "hijack_reasoninig"
 INTERVENTIONS_DIR = PROJECT_ROOT / "interventions"
 
