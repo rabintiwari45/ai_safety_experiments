@@ -6,6 +6,7 @@ import csv
 import io
 import json
 import os
+import re
 from pathlib import Path
 from urllib.request import urlopen
 
@@ -470,3 +471,156 @@ def upsert_jsonl_row(output_path: Path, record: dict, key: str = "index") -> Non
 
 def count_tokens(tokenizer, text: str) -> int:
     return len(tokenizer.encode(text or "", add_special_tokens=False))
+
+
+def _collapse_consecutive(items: list[str], keyfn=None) -> list[str]:
+    keyfn = keyfn or (lambda x: x)
+    out: list[str] = []
+    prev = object()
+    for item in items:
+        k = keyfn(item)
+        if k == prev and k != "":
+            continue
+        out.append(item)
+        prev = k
+    return out
+
+
+def _collapse_immediate_repeats(text: str, min_len: int = 12) -> str:
+    """Keep one copy of a chunk that is immediately repeated (generation loops)."""
+    if len(text) < min_len * 2:
+        return text
+    sizes = (
+        12,
+        16,
+        20,
+        24,
+        32,
+        40,
+        50,
+        60,
+        80,
+        120,
+        160,
+        200,
+        300,
+        400,
+        600,
+        800,
+        1200,
+        2000,
+        4000,
+    )
+    out: list[str] = []
+    i = 0
+    n = len(text)
+    while i < n:
+        matched = False
+        remaining = n - i
+        for size in sizes:
+            if size < min_len or remaining < size * 2:
+                continue
+            block = text[i : i + size]
+            if text[i + size : i + 2 * size] != block:
+                continue
+            k = 2
+            while i + (k + 1) * size <= n and text[i + k * size : i + (k + 1) * size] == block:
+                k += 1
+            out.append(block)
+            i += k * size
+            matched = True
+            break
+        if not matched:
+            out.append(text[i])
+            i += 1
+    return "".join(out)
+
+
+def _line_loop_key(line: str) -> str:
+    return re.sub(r"\d+", "#", line.strip())
+
+
+def _collapse_repeating_line_blocks(lines: list[str], max_period: int = 12) -> list[str]:
+    """Collapse A B A B... and numbered clones of the same block, keeping the first copy."""
+    keys = [_line_loop_key(ln) for ln in lines]
+    out: list[str] = []
+    i = 0
+    n = len(lines)
+    while i < n:
+        matched = False
+        max_p = min(max_period, (n - i) // 2)
+        for period in range(1, max_p + 1):
+            block_keys = keys[i : i + period]
+            if not any(block_keys):
+                continue
+            k = 1
+            while (
+                i + (k + 1) * period <= n
+                and keys[i + k * period : i + (k + 1) * period] == block_keys
+            ):
+                k += 1
+            if k >= 2:
+                out.extend(lines[i : i + period])
+                i += k * period
+                matched = True
+                break
+        if not matched:
+            out.append(lines[i])
+            i += 1
+    return out
+
+
+def _limit_high_frequency_lines(
+    lines: list[str], burst_limit: int = 4, keep: int = 2
+) -> list[str]:
+    """If the same line appears more than burst_limit times, keep only `keep` copies."""
+    freq: dict[str, int] = {}
+    for ln in lines:
+        key = ln.strip()
+        if key:
+            freq[key] = freq.get(key, 0) + 1
+    seen: dict[str, int] = {}
+    out: list[str] = []
+    for ln in lines:
+        key = ln.strip()
+        if not key or freq.get(key, 0) <= burst_limit:
+            out.append(ln)
+            continue
+        seen[key] = seen.get(key, 0) + 1
+        if seen[key] <= keep:
+            out.append(ln)
+    return out
+
+
+def _collapse_repeated_sentences(text: str) -> str:
+    parts = re.split(r"(?<=[।])\s*", text)
+    parts = _collapse_consecutive(parts, keyfn=lambda s: s.strip())
+    out: list[str] = []
+    for i, part in enumerate(parts):
+        if i:
+            if part.startswith("\n") or (out and out[-1].endswith("\n")):
+                out.append(part)
+            else:
+                out.append(" " + part if part else part)
+        else:
+            out.append(part)
+    return "".join(out).rstrip()
+
+
+def dedupe_repeated_text(text: str) -> str:
+    """Strip model loops: consecutive identical lines/paragraphs and immediate block repeats."""
+    raw = text or ""
+    if not raw.strip():
+        return raw
+    lines = _collapse_consecutive(raw.split("\n"))
+    lines = _collapse_repeating_line_blocks(lines)
+    lines = _limit_high_frequency_lines(lines)
+    text = "\n".join(lines)
+    paras = _collapse_consecutive(
+        re.split(r"\n\s*\n", text), keyfn=lambda p: p.strip()
+    )
+    text = "\n\n".join(paras)
+    text = _collapse_repeated_sentences(text)
+    text = _collapse_immediate_repeats(text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()

@@ -11,7 +11,8 @@ contains the prefilled probe). After a successful run:
 
 Resume: if the output file already has English in `output`, that row is skipped.
 If `output` is still Nepali (Devanagari), `new_output_suffix` is translated into `output`.
-Rows whose new_output_suffix is longer than --max-suffix-tokens (default 12000) are skipped.
+Repeated generation loops in new_output_suffix are stripped before translation
+(disable with --no-dedupe).
 
 Usage (from ai_safety_experiments/):
     python scripts/harmbench/multivalue_standard/translate_ne_infer_output_to_english.py --dry-run
@@ -38,6 +39,7 @@ sys.path.insert(0, str(SCRIPTS_DIR / "misc"))
 from common import (
     HIJACK_CLASSIFIER_MODEL,
     HARMBENCH_MULTIVALUE_STANDARD_DIR,
+    dedupe_repeated_text,
     load_records,
     upsert_jsonl_row,
 )
@@ -100,16 +102,15 @@ def parse_args() -> argparse.Namespace:
         help="Retranslate even if output is already English",
     )
     parser.add_argument(
-        "--max-completion-tokens",
-        type=int,
-        default=8000,
-        help="Reserved completion budget per API call (default 16384)",
+        "--no-dedupe",
+        action="store_true",
+        help="Do not strip repeated loops from new_output_suffix before translating",
     )
     parser.add_argument(
-        "--max-suffix-tokens",
+        "--max-completion-tokens",
         type=int,
-        default=12000,
-        help="Skip translation if new_output_suffix tokens exceed this (default 12000)",
+        default=65000,
+        help="Reserved completion budget per API call (default 16384)",
     )
     return parser.parse_args()
 
@@ -117,22 +118,15 @@ def parse_args() -> argparse.Namespace:
 DEVANAGARI_RE = re.compile(r"[\u0900-\u097F]")
 
 
-def nepali_source(row: dict) -> str:
-    return (row.get("new_output_suffix") or "").strip()
+def nepali_source(row: dict, dedupe: bool = True) -> str:
+    text = (row.get("new_output_suffix") or "").strip()
+    if dedupe:
+        text = dedupe_repeated_text(text)
+    return text.strip()
 
 
 def looks_nepali(text: str) -> bool:
     return bool(DEVANAGARI_RE.search(text or ""))
-
-
-def suffix_token_count(row: dict, source_ne: str) -> int:
-    stored = row.get("new_output_suffix_tokens")
-    try:
-        if stored is not None:
-            return int(stored)
-    except (TypeError, ValueError):
-        pass
-    return len((source_ne or "").split())
 
 
 def load_done_indices(output_path: Path) -> set[int]:
@@ -146,9 +140,6 @@ def load_done_indices(output_path: Path) -> set[int]:
             continue
         output = (row.get("output") or "").strip()
         if not output:
-            continue
-        if (row.get("output_translation_skip_reason") or "") == "new_output_suffix_too_long":
-            done.add(int(idx))
             continue
         if looks_nepali(output):
             continue
@@ -222,8 +213,11 @@ def main() -> None:
         records = records[: min(args.limit, len(records))]
 
     if args.dry_run:
-        row0 = next((r for r in records if nepali_source(r)), records[0])
-        src = nepali_source(row0)
+        row0 = next(
+            (r for r in records if nepali_source(r, dedupe=not args.no_dedupe)),
+            records[0],
+        )
+        src = nepali_source(row0, dedupe=not args.no_dedupe)
         print(f"Input:  {input_path}")
         print(f"Output: {output_path}")
         print(f"Model:  {args.model}")
@@ -259,7 +253,7 @@ def main() -> None:
         if idx in done:
             continue
 
-        source_ne = nepali_source(row)
+        source_ne = nepali_source(row, dedupe=not args.no_dedupe)
         if not source_ne:
             record = copy.deepcopy(row)
             record["output_ne"] = ""
@@ -268,23 +262,6 @@ def main() -> None:
             upsert_jsonl_row(output_path, record)
             n_skip += 1
             print(f"[{idx}] SKIP empty new_output_suffix")
-            continue
-
-        n_tokens = suffix_token_count(row, source_ne)
-        if n_tokens > args.max_suffix_tokens:
-            record = copy.deepcopy(row)
-            record["output_ne"] = source_ne
-            record["output_translation_skipped"] = True
-            record["output_translation_skip_reason"] = "new_output_suffix_too_long"
-            record["output_translation_error"] = (
-                f"new_output_suffix_tokens={n_tokens} > {args.max_suffix_tokens}"
-            )
-            upsert_jsonl_row(output_path, record)
-            n_skip += 1
-            print(
-                f"[{idx}] SKIP new_output_suffix_too_long "
-                f"tokens={n_tokens} > {args.max_suffix_tokens}"
-            )
             continue
 
         print(f"[{idx}] output is Nepali; translating new_output_suffix -> output")
