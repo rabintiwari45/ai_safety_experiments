@@ -43,6 +43,10 @@ MULTIVALUE_STANDARD_BYPASS_COLLOQUIAL_SG_INFER = (
     HARMBENCH_MULTIVALUE_STANDARD_DIR
     / "bypass_reasoning_deepseekv3-03_colloquial_singapore_infer.jsonl"
 )
+MULTIVALUE_STANDARD_BYPASS_COLLOQUIAL_SG_OUTPUT_PREFIX_INFER = (
+    HARMBENCH_MULTIVALUE_STANDARD_DIR
+    / "bypass_reasoning_deepseekv3-03_colloquial_singapore_output_prefix_infer.jsonl"
+)
 HIJACK_REASONING_DIR = OUTPUT_DIR / "hijack_reasoninig"
 INTERVENTIONS_DIR = PROJECT_ROOT / "interventions"
 
