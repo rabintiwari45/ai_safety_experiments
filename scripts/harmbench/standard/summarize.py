@@ -3,6 +3,7 @@
 Usage (from ai_safety_experiments/):
     python scripts/harmbench/standard/summarize.py --input outputs/harmbench/standard/bypass_reasoning_deepseekv3-03_infer_classified.jsonl
     python scripts/harmbench/standard/summarize.py --input path/to/classified.jsonl --output path/to/summary.json
+    python scripts/harmbench/standard/summarize.py --input path/to/classified.jsonl --limit 50
 """
 
 from __future__ import annotations

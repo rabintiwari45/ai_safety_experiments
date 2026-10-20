@@ -7,6 +7,7 @@ Write a file only if --output is passed.
 Usage:
     python scripts/misc/summarize_classified.py --input outputs/standard/harmbench_standard_qwen3_8b_k1_B-I1_classified.jsonl
     python scripts/misc/summarize_classified.py --input outputs/dynamic/harmbench_standard_qwen3_8b_dynamic_classified.jsonl
+    python scripts/misc/summarize_classified.py --input path/to/classified.jsonl --limit 50
 """
 
 from __future__ import annotations
@@ -75,6 +76,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional path to write summary JSON. If omitted, print only.",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Use the first N rows by index (default: all)",
+    )
     return parser.parse_args()
 
 
@@ -84,8 +91,17 @@ def main() -> None:
     if not input_path.exists():
         raise FileNotFoundError(input_path)
     results = load_records(input_path)
+    if args.limit is not None:
+        results = sorted(
+            results,
+            key=lambda r: int(r["index"]) if r.get("index") is not None else 10**9,
+        )
+        results = results[: min(args.limit, len(results))]
     summary_path = Path(args.output) if args.output else None
-    write_summary(compute_summary(results, input_path), summary_path)
+    summary = compute_summary(results, input_path)
+    if args.limit is not None:
+        summary["limit"] = args.limit
+    write_summary(summary, summary_path)
 
 
 if __name__ == "__main__":
