@@ -23,6 +23,17 @@ HARMBENCH_DIR = OUTPUT_DIR / "harmbench"
 HARMBENCH_STANDARD_DIR = HARMBENCH_DIR / "standard"
 HARMBENCH_CONTEXTUAL_DIR = HARMBENCH_DIR / "contextual"
 HARMBENCH_MULTIVALUE_STANDARD_DIR = HARMBENCH_DIR / "multivalue_standard"
+MULTIVALUE_STANDARD_BYPASS = (
+    HARMBENCH_MULTIVALUE_STANDARD_DIR / "bypass_reasoning_deepseekv3-03.jsonl"
+)
+MULTIVALUE_STANDARD_BYPASS_NE = (
+    HARMBENCH_MULTIVALUE_STANDARD_DIR
+    / "bypass_reasoning_deepseekv3-03_nepali.jsonl"
+)
+MULTIVALUE_STANDARD_BYPASS_NE_OUTPUT_PREFIX_INFER = (
+    HARMBENCH_MULTIVALUE_STANDARD_DIR
+    / "bypass_reasoning_deepseekv3-03_nepali_output_prefix_infer.jsonl"
+)
 MULTIVALUE_STANDARD_BYPASS_COLLOQUIAL_SG = (
     HARMBENCH_MULTIVALUE_STANDARD_DIR
     / "bypass_reasoning_deepseekv3-03_colloquial_singapore.jsonl"
