@@ -11,6 +11,7 @@ contains the prefilled probe). After a successful run:
 
 Resume: if the output file already has English in `output`, that row is skipped.
 If `output` is still Nepali (Devanagari), `new_output_suffix` is translated into `output`.
+Rows whose new_output_suffix is longer than --max-suffix-tokens (default 12000) are skipped.
 
 Usage (from ai_safety_experiments/):
     python scripts/harmbench/multivalue_standard/translate_ne_infer_output_to_english.py --dry-run
@@ -104,6 +105,12 @@ def parse_args() -> argparse.Namespace:
         default=8000,
         help="Reserved completion budget per API call (default 16384)",
     )
+    parser.add_argument(
+        "--max-suffix-tokens",
+        type=int,
+        default=12000,
+        help="Skip translation if new_output_suffix tokens exceed this (default 12000)",
+    )
     return parser.parse_args()
 
 
@@ -118,6 +125,16 @@ def looks_nepali(text: str) -> bool:
     return bool(DEVANAGARI_RE.search(text or ""))
 
 
+def suffix_token_count(row: dict, source_ne: str) -> int:
+    stored = row.get("new_output_suffix_tokens")
+    try:
+        if stored is not None:
+            return int(stored)
+    except (TypeError, ValueError):
+        pass
+    return len((source_ne or "").split())
+
+
 def load_done_indices(output_path: Path) -> set[int]:
     """Skip only rows whose output file `output` is already English."""
     if not output_path.exists():
@@ -129,6 +146,9 @@ def load_done_indices(output_path: Path) -> set[int]:
             continue
         output = (row.get("output") or "").strip()
         if not output:
+            continue
+        if (row.get("output_translation_skip_reason") or "") == "new_output_suffix_too_long":
+            done.add(int(idx))
             continue
         if looks_nepali(output):
             continue
@@ -248,6 +268,23 @@ def main() -> None:
             upsert_jsonl_row(output_path, record)
             n_skip += 1
             print(f"[{idx}] SKIP empty new_output_suffix")
+            continue
+
+        n_tokens = suffix_token_count(row, source_ne)
+        if n_tokens > args.max_suffix_tokens:
+            record = copy.deepcopy(row)
+            record["output_ne"] = source_ne
+            record["output_translation_skipped"] = True
+            record["output_translation_skip_reason"] = "new_output_suffix_too_long"
+            record["output_translation_error"] = (
+                f"new_output_suffix_tokens={n_tokens} > {args.max_suffix_tokens}"
+            )
+            upsert_jsonl_row(output_path, record)
+            n_skip += 1
+            print(
+                f"[{idx}] SKIP new_output_suffix_too_long "
+                f"tokens={n_tokens} > {args.max_suffix_tokens}"
+            )
             continue
 
         print(f"[{idx}] output is Nepali; translating new_output_suffix -> output")
