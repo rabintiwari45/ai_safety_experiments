@@ -49,7 +49,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--probes", default=str(STANDARD_PROBES))
     parser.add_argument("--baseline", default=str(BASELINE_JSONL))
     parser.add_argument("--output", default=str(PROBE_INFER))
-    parser.add_argument("--max-new-tokens", type=int, default=4048)
+    parser.add_argument("--max-new-tokens", type=int, default=8048)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument(
         "--dry-run",
