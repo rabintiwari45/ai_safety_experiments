@@ -27,7 +27,7 @@ from transformers import AutoTokenizer
 import sglang as sgl
 from sglang.srt.parser.reasoning_parser import ReasoningParser
 
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 sys.path.insert(0, str(SCRIPTS_DIR / "misc"))
 from common import (

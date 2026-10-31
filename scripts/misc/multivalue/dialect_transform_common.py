@@ -10,10 +10,10 @@ from typing import Type
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import HARMBENCH_STANDARD_DIR, load_records
+from common import HARMBENCH_STANDARD_QWEN3_DIR, load_records
 from multivalue_compat import apply_multivalue_compat_patches, transform_text
 
-DEFAULT_INPUT = HARMBENCH_STANDARD_DIR / "bypass_reasoning_deepseekv3-03.jsonl"
+DEFAULT_INPUT = HARMBENCH_STANDARD_QWEN3_DIR / "bypass_reasoning_deepseekv3-03.jsonl"
 
 DIALECT_ALIASES: dict[str, str] = {
     "southern_am": "SoutheastAmericanEnclaveDialect",

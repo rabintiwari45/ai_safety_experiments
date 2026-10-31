@@ -10,7 +10,7 @@ Usage (from ai_safety_experiments/):
     python scripts/misc/multivalue/transform_value_dialect.py --list-dialects
     python scripts/misc/multivalue/transform_value_dialect.py --dry-run --limit 1 \\
         --dialect southern_am --output-key bypass_reasoning_southern_am \\
-        --output outputs/harmbench/standard/bypass_reasoning_deepseekv3-03_southern_am.jsonl
+        --output outputs/harmbench/standard/qwen3/bypass_reasoning_deepseekv3-03_southern_am.jsonl
 """
 
 from __future__ import annotations

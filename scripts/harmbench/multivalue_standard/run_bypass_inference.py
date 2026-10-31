@@ -1,7 +1,7 @@
 """
 Run Qwen3 thinking inference from VALUE dialect bypass reasoning traces.
 
-Same as scripts/harmbench/standard/run_bypass_inference.py, but reads
+Same as scripts/harmbench/standard/qwen3/run_bypass_inference.py, but reads
 bypass_reasoning_colloquial_singapore (not bypass_reasoning) from
 outputs/harmbench/multivalue_standard/.
 

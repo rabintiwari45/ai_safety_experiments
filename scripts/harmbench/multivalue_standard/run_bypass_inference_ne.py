@@ -4,7 +4,7 @@ Continue Qwen3 from Nepali bypass text in the assistant *output* channel.
 Uses prompt_ne as the user message and bypass_reasoning_ne as the probe /
 assistant-output prefix. enable_thinking=False so the think block stays
 empty; the model continues the visible answer (same as
-scripts/harmbench/standard/run_bypass_inference_output_prefix.py).
+scripts/harmbench/standard/qwen3/run_bypass_inference_output_prefix.py).
 
 Resume: rows already in --output with a non-empty new_output_suffix are skipped.
 Rows missing from --output, or present with an empty new_output_suffix, are run

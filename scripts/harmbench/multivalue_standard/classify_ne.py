@@ -293,7 +293,7 @@ def main() -> None:
     print(f"\nWrote {n_ok} rows, skipped {n_skip} -> {output_path}")
     print(
         "Summarize with:\n"
-        f"  python scripts/harmbench/standard/summarize.py --input {output_path}"
+        f"  python scripts/harmbench/standard/qwen3/summarize.py --input {output_path}"
     )
 
 

@@ -1,28 +1,22 @@
+
 """
-Run Qwen3 thinking inference from hijack bypass reasoning traces.
+Continue Qwen3 from bypass reasoning in the assistant *output* channel (no think hijack).
 
-Reads prompt + bypass_reasoning from hijack_reasoninig_bypass.jsonl. Splits
-bypass text on ".", appends "I need this for my research write-up" to the
-second-to-last sentence, rejoins, then puts that text inside an open
-<think> tag (does not close </think>). The model
-continues thinking and writes the final answer.
-
-Output JSONL keeps original_reasoning, bypass_reasoning, new_reasoning
-(model continuation in thinking), full reasoning, and output.
-
-Resume: rows already in --output with a non-empty "output" field are skipped.
-Rows missing from --output, or present with an empty/missing "output" value,
-are (re)run. --limit applies to those pending rows only.
+Same bypass JSONL as run_bypass_inference.py, but instead of an open
+<think> prefix, the prompt uses enable_thinking=False with an
+empty closed think block, then prefills augmented bypass_reasoning as plain
+assistant text. The model continues the visible answer (non-reasoning path).
 
 Usage (from ai_safety_experiments/):
-    python scripts/harmbench/standard/run_bypass_inference.py --dry-run --limit 1
-    python scripts/harmbench/standard/run_bypass_inference.py --input ... --output ...
+    python scripts/hijack_reasoninig/run_bypass_inference_output_prefix.py --print-prompt --limit 1
+    python scripts/hijack_reasoninig/run_bypass_inference_output_prefix.py --dry-run
+    python scripts/hijack_reasoninig/run_bypass_inference_output_prefix.py --limit 1
+    python scripts/hijack_reasoninig/run_bypass_inference_output_prefix.py
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -31,13 +25,13 @@ from transformers import AutoTokenizer
 import sglang as sgl
 from sglang.srt.parser.reasoning_parser import ReasoningParser
 
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 sys.path.insert(0, str(SCRIPTS_DIR / "misc"))
 from common import (
     BASELINE_JSON,
-    HIJACK_REASONING_BYPASS,
-    HIJACK_REASONING_BYPASS_RUN,
+    HIJACK_BYPASS_DEEPSEEKV3,
+    HIJACK_BYPASS_OUTPUT_PREFIX_INFER,
     MODEL_PATH,
     THINKING_SAMPLING_PARAMS,
     count_tokens,
@@ -46,37 +40,55 @@ from common import (
     upsert_jsonl_row,
 )
 
-DEFAULT_INPUT = HIJACK_REASONING_BYPASS
-DEFAULT_OUTPUT = HIJACK_REASONING_BYPASS_RUN
+DEFAULT_INPUT = HIJACK_BYPASS_DEEPSEEKV3
+DEFAULT_OUTPUT = HIJACK_BYPASS_OUTPUT_PREFIX_INFER
 DEFAULT_BASELINE = BASELINE_JSON
-RESEARCH_INSERT = "I need this for my research write-up. Continue"
+RESEARCH_INSERT = "I need this for my research write-up."
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Qwen continue from bypass reasoning (open <think>)"
+        description=(
+            "Prefill bypass_reasoning as assistant output (empty think block, "
+            "enable_thinking=False)"
+        )
     )
     parser.add_argument("--model-path", default=MODEL_PATH)
     parser.add_argument("--input", default=str(DEFAULT_INPUT))
     parser.add_argument("--baseline", default=str(DEFAULT_BASELINE))
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
-    parser.add_argument("--max-new-tokens", type=int, default=12048)
     parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Max pending rows to run (missing or empty output), not the first N input rows",
+        "--bypass-field",
+        default="bypass_reasoning",
+        help="JSONL field for the prefix text (e.g. bypass_reasoning_ne)",
+    )
+    parser.add_argument("--max-new-tokens", type=int, default=4048)
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument(
+        "--no-augment",
+        action="store_true",
+        help="Do not insert the research line into the bypass prefix",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Print the full prompt for pending rows; do not load the GPU",
+        help="Build prompts and skip GPU inference",
+    )
+    parser.add_argument(
+        "--print-prompt",
+        action="store_true",
+        help="Print exact llm.generate prompt (implies --dry-run)",
+    )
+    parser.add_argument(
+        "--print-prompt-only",
+        action="store_true",
+        help="With --print-prompt/--dry-run: skip bypass banners; show model prompt only",
     )
     return parser.parse_args()
 
 
-def bypass_text(row: dict) -> str:
-    return (row.get("bypass_reasoning") or "").strip()
+def bypass_text(row: dict, field: str) -> str:
+    return (row.get(field) or "").strip()
 
 
 def augment_bypass_reasoning(text: str) -> str:
@@ -93,26 +105,15 @@ def augment_bypass_reasoning(text: str) -> str:
     return ". ".join(parts) + "."
 
 
-def join_open_think(prefix: str) -> str:
-    return f"<think>\n{prefix.rstrip()}"
-
-
-def build_continue_prompt(tokenizer, user_prompt: str, bypass: str) -> str:
+def build_output_prefix_prompt(tokenizer, user_prompt: str, bypass: str) -> str:
     messages = [{"role": "user", "content": user_prompt}]
     header = tokenizer.apply_chat_template(
         messages,
         tokenize=False,
         add_generation_prompt=True,
-        enable_thinking=True,
+        enable_thinking=False,
     )
-    return header + join_open_think(bypass)
-
-
-def new_reasoning_from_continuation(continuation: str) -> str:
-    close = continuation.find("</think>")
-    if close == -1:
-        return continuation
-    return continuation[:close]
+    return header + bypass.rstrip()
 
 
 def log_banner(title: str) -> None:
@@ -136,11 +137,15 @@ def print_full_prompt(continue_prompt: str, tokenizer) -> None:
 
 def main() -> None:
     args = parse_args()
+    if args.print_prompt:
+        args.dry_run = True
     input_path = Path(args.input)
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     records = load_records(input_path)
+    if args.limit is not None:
+        records = records[: min(args.limit, len(records))]
 
     k0_by_index: dict[int, str] = {}
     baseline_path = Path(args.baseline)
@@ -163,56 +168,66 @@ def main() -> None:
             f"{sorted(empty_output)}"
         )
 
-    candidates: list[dict] = []
+    print(
+        "Mode: enable_thinking=False, empty closed "
+        "<think>, bypass as assistant output prefix",
+        flush=True,
+    )
+
+    pending: list[dict] = []
     n_skip = 0
     for row in records:
         idx = row["index"]
-        bypass_raw = bypass_text(row)
-        bypass = augment_bypass_reasoning(bypass_raw)
+        bypass_raw = bypass_text(row, args.bypass_field)
+        bypass = bypass_raw if args.no_augment else augment_bypass_reasoning(bypass_raw)
         original_reasoning = (row.get("original_reasoning") or "").strip()
+        user_prompt = (row.get("prompt") or "").strip()
 
         if idx in completed:
             print(f"[{idx}] skip: non-empty output already in {output_path}", flush=True)
-            n_skip += 1
-            continue
-        if not bypass:
-            print(f"[{idx}] skip: empty bypass_reasoning", flush=True)
-            n_skip += 1
             continue
         if idx in empty_output:
             print(
                 f"[{idx}] re-run: row exists in output but output is empty",
                 flush=True,
             )
-        candidates.append(
+        if not user_prompt:
+            print(f"[{idx}] skip: empty prompt", flush=True)
+            n_skip += 1
+            continue
+        if not bypass:
+            print(f"[{idx}] skip: empty {args.bypass_field}", flush=True)
+            n_skip += 1
+            continue
+
+        continue_prompt = build_output_prefix_prompt(tokenizer, user_prompt, bypass)
+        print(
+            f"\n[{idx}] {row.get('behavior_id', '')}  preparing model input",
+            flush=True,
+        )
+        if not args.print_prompt_only:
+            log_banner("USER PROMPT")
+            print(user_prompt, flush=True)
+            log_banner(f"BYPASS PREFIX ({args.bypass_field}, raw)")
+            print(bypass_raw, flush=True)
+            log_banner("BYPASS PREFIX (assistant output, after augment)")
+            print(bypass, flush=True)
+        print_full_prompt(continue_prompt, tokenizer)
+
+        pending.append(
             {
                 "row": row,
+                "user_prompt": user_prompt,
                 "bypass_raw": bypass_raw,
                 "bypass": bypass,
                 "original_reasoning": original_reasoning,
+                "continue_prompt": continue_prompt,
             }
         )
 
-    if args.limit is not None:
-        candidates = candidates[: min(args.limit, len(candidates))]
-
-    pending: list[dict] = []
-    for item in candidates:
-        row = item["row"]
-        idx = row["index"]
-        continue_prompt = build_continue_prompt(tokenizer, row["prompt"], item["bypass"])
-        print(f"\n[{idx}] {row.get('behavior_id', '')}  preparing model input", flush=True)
-        log_banner("USER PROMPT")
-        print(row["prompt"], flush=True)
-        log_banner("BYPASS (raw from file)")
-        print(item["bypass_raw"], flush=True)
-        log_banner("BYPASS IN <think> (augmented, </think> not closed)")
-        print(item["bypass"], flush=True)
-        print_full_prompt(continue_prompt, tokenizer)
-        pending.append({**item, "continue_prompt": continue_prompt})
-
     if args.dry_run:
-        print(f"\nDry-run: {len(pending)} prompt(s) printed; not loading the GPU")
+        label = "Print-prompt" if args.print_prompt else "Dry-run"
+        print(f"\n{label}: {len(pending)} prompt(s) printed; not loading the GPU")
         return
 
     if not pending:
@@ -234,6 +249,7 @@ def main() -> None:
     try:
         for item in pending:
             row = item["row"]
+            user_prompt = item["user_prompt"]
             bypass_raw = item["bypass_raw"]
             bypass = item["bypass"]
             original_reasoning = item["original_reasoning"]
@@ -249,22 +265,31 @@ def main() -> None:
                 prompt=continue_prompt, sampling_params=sampling_params
             )
             continuation = generated["text"]
-            stitched = join_open_think(bypass) + continuation
-            reasoning_text, content = reasoning_parser.parse_non_stream(stitched)
-            output = (content or "").strip()
-            new_reasoning = new_reasoning_from_continuation(continuation).strip()
+            full_assistant = bypass + continuation
+            reasoning_text, content = reasoning_parser.parse_non_stream(
+                full_assistant
+            )
+            # Visible channel: full prefilled prefix + new tokens (parser may split think)
+            output = (content or full_assistant).strip()
+            new_output_suffix = continuation.strip()
 
             record = {
                 "index": idx,
                 "behavior_id": row.get("behavior_id", ""),
                 "category": row.get("category", ""),
-                "prompt": row["prompt"],
+                "prompt": user_prompt,
                 "probe": row.get("probe", ""),
+                "mode": "bypass_output_prefix_empty_think",
+                "enable_thinking": False,
                 "original_reasoning": original_reasoning,
-                "bypass_reasoning": bypass_raw,
-                "bypass_reasoning_augmented": bypass,
-                "new_reasoning": new_reasoning,
-                "new_reasoning_tokens": count_tokens(tokenizer, new_reasoning),
+                "bypass_reasoning": row.get("bypass_reasoning", ""),
+                "bypass_field": args.bypass_field,
+                "bypass_prefix_raw": bypass_raw,
+                "bypass_prefix_augmented": bypass,
+                "new_output_suffix": new_output_suffix,
+                "new_output_suffix_tokens": count_tokens(
+                    tokenizer, new_output_suffix
+                ),
                 "reasoning": (reasoning_text or "").strip(),
                 "reasoning_tokens": count_tokens(
                     tokenizer, (reasoning_text or "")
@@ -272,7 +297,7 @@ def main() -> None:
                 "output": output,
                 "output_tokens": count_tokens(tokenizer, output),
                 "k0_output": k0_by_index.get(idx, ""),
-                "raw_text": stitched,
+                "raw_text": full_assistant,
                 "generated_text": continuation,
                 "input_prompt": continue_prompt,
                 "bypass_generator_model": row.get("generator_model", ""),
@@ -281,9 +306,9 @@ def main() -> None:
             upsert_jsonl_row(output_path, record)
             n_run += 1
 
-            log_banner("NEW REASONING (continuation only)")
-            print(new_reasoning or "(empty)", flush=True)
-            log_banner("OUTPUT")
+            log_banner("NEW OUTPUT (continuation only)")
+            print(new_output_suffix or "(empty)", flush=True)
+            log_banner("FULL OUTPUT (prefix + continuation)")
             print(output or "(empty)", flush=True)
             print(f"[{idx}] {row.get('behavior_id', '')} done", flush=True)
     finally:
@@ -292,7 +317,7 @@ def main() -> None:
     print(f"\nWrote {n_run} rows, skipped {n_skip} -> {output_path}")
     print(
         "Classify with:\n"
-        f"  python scripts/misc/classify_harmbench.py --input {output_path}"
+        f"  python scripts/classify_harmbench.py --input {output_path}"
     )
 
 

@@ -5,7 +5,7 @@ Same as scripts/harmbench/multivalue_standard/run_bypass_inference.py, but
 does not inject dialect text into an open <think> tag. Instead
 enable_thinking=False leaves an empty closed think block, and the
 augmented dialect field is prefilled as plain assistant output (same as
-scripts/harmbench/standard/run_bypass_inference_output_prefix.py).
+scripts/harmbench/standard/qwen3/run_bypass_inference_output_prefix.py).
 
 Reads bypass_reasoning_colloquial_singapore (not bypass_reasoning) from
 outputs/harmbench/multivalue_standard/. Splits that dialect text on ".",
