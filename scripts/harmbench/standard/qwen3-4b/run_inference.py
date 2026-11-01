@@ -12,6 +12,10 @@ thinking and writes the final answer.
 Reads outputs/harmbench/standard/qwen3-4b/probes.jsonl.
 Writes outputs/harmbench/standard/qwen3-4b/probes_reasoning.jsonl.
 
+Resume: rows already in the output with a non-empty "output" are skipped.
+Rows missing from the output, or present with an empty "output", are run
+again. --limit applies to those pending rows, with empty-output rows first.
+
 Usage (from ai_safety_experiments/):
     python scripts/harmbench/standard/qwen3-4b/run_inference.py --dry-run --limit 1
     python scripts/harmbench/standard/qwen3-4b/run_inference.py --limit 1
@@ -21,7 +25,6 @@ Usage (from ai_safety_experiments/):
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -37,8 +40,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import (  # noqa: E402
     THINKING_SAMPLING_PARAMS,
     count_tokens,
-    load_completed_ids,
+    load_infer_resume_state,
     load_records,
+    upsert_jsonl_row,
 )
 from paths import (  # noqa: E402
     BASELINE_JSONL,
@@ -61,7 +65,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--baseline", default=str(DEFAULT_BASELINE))
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
     parser.add_argument("--max-new-tokens", type=int, default=12048)
-    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Max pending rows to run (missing or empty output), not the first N input rows",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -142,8 +151,6 @@ def main() -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     records = load_records(probe_path)
-    if args.limit is not None:
-        records = records[: min(args.limit, len(records))]
 
     k0_by_index: dict[int, str] = {}
     baseline_path = Path(args.baseline)
@@ -154,24 +161,52 @@ def main() -> None:
     print(f"Loading tokenizer from {args.model_path} ...")
     tokenizer = AutoTokenizer.from_pretrained(args.model_path)
 
-    completed = load_completed_ids(output_path)
+    completed, empty_output = load_infer_resume_state(output_path)
     if completed:
-        print(f"Resuming: {len(completed)} rows already in {output_path}")
+        print(
+            f"Resume: skipping {len(completed)} index(es) with non-empty output "
+            f"in {output_path}"
+        )
+    if empty_output:
+        print(
+            f"Resume: will re-run {len(empty_output)} index(es) with empty output: "
+            f"{sorted(empty_output)}"
+        )
 
-    pending: list[dict] = []
+    retries: list[dict] = []
+    fresh: list[dict] = []
     for row in records:
         idx = row["index"]
         probe = probe_text(row)
         if idx in completed:
             print(
-                f"[{idx}] already in {output_path}; skip generate. "
-                "Delete that file or pass --output to rerun.",
+                f"[{idx}] skip: non-empty output already in {output_path}",
                 flush=True,
             )
             continue
         if row.get("skipped") or not probe:
             print(f"[{idx}] skip: empty probe", flush=True)
             continue
+        item = {"row": row, "probe": probe, "retry_empty_output": idx in empty_output}
+        if idx in empty_output:
+            print(
+                f"[{idx}] re-run: row exists in output but output is empty",
+                flush=True,
+            )
+            retries.append(item)
+        else:
+            fresh.append(item)
+
+    # Empty-output retries first so --limit fills those before new indices.
+    candidates = retries + fresh
+    if args.limit is not None:
+        candidates = candidates[: min(args.limit, len(candidates))]
+
+    pending: list[dict] = []
+    for item in candidates:
+        row = item["row"]
+        probe = item["probe"]
+        idx = row["index"]
         continue_prompt = build_continue_prompt(tokenizer, row["prompt"], probe)
         debug_print_input(
             idx=idx,
@@ -181,13 +216,7 @@ def main() -> None:
             continue_prompt=continue_prompt,
             tokenizer=tokenizer,
         )
-        pending.append(
-            {
-                "row": row,
-                "probe": probe,
-                "continue_prompt": continue_prompt,
-            }
-        )
+        pending.append({**item, "continue_prompt": continue_prompt})
 
     if args.dry_run:
         print(f"\nDry-run: {len(pending)} prompt(s) printed; not loading the GPU")
@@ -209,60 +238,65 @@ def main() -> None:
     reasoning_parser = ReasoningParser("qwen3")
 
     n_run = 0
-    n_skip = 0
     try:
-        with output_path.open("a", encoding="utf-8") as out_f:
-            for item in pending:
-                row = item["row"]
-                probe = item["probe"]
-                continue_prompt = item["continue_prompt"]
-                idx = row["index"]
+        for item in pending:
+            row = item["row"]
+            probe = item["probe"]
+            continue_prompt = item["continue_prompt"]
+            idx = row["index"]
 
+            kind = "re-run empty output" if item.get("retry_empty_output") else "generate"
+            print(
+                f"\n[{idx}] {kind}; sending the prompt above to the model ...",
+                flush=True,
+            )
+            print_full_prompt(continue_prompt, tokenizer)
+            generated = llm.generate(
+                prompt=continue_prompt, sampling_params=sampling_params
+            )
+            continuation = generated["text"]
+            stitched = join_open_think(probe) + continuation
+            reasoning_text, content = reasoning_parser.parse_non_stream(
+                stitched
+            )
+            output = (content or "").strip()
+            new_reasoning = new_reasoning_from_continuation(continuation)
+
+            log_banner("RAW MODEL CONTINUATION")
+            print(continuation if continuation else "(empty)", flush=True)
+            log_banner("THINKING")
+            print(
+                (reasoning_text or "").strip() or "(empty)",
+                flush=True,
+            )
+            log_banner("OUTPUT")
+            print(output if output else "(empty)", flush=True)
+
+            record = {
+                "index": idx,
+                "behavior_id": row.get("behavior_id", ""),
+                "category": row.get("category", ""),
+                "prompt": row["prompt"],
+                "probe": probe,
+                "skipped": False,
+                "new_reasoning": new_reasoning.strip(),
+                "new_reasoning_tokens": count_tokens(tokenizer, new_reasoning),
+                "reasoning": (reasoning_text or "").strip(),
+                "output": output,
+                "k0_output": k0_by_index.get(idx, ""),
+                "raw_text": stitched,
+                "generated_text": continuation,
+                "input_prompt": continue_prompt,
+            }
+            upsert_jsonl_row(output_path, record)
+            n_run += 1
+            if not output:
                 print(
-                    f"\n[{idx}] sending the prompt above to the model ...",
+                    f"[{idx}] {row.get('behavior_id', '')} still has empty output "
+                    "(will retry on the next run)",
                     flush=True,
                 )
-                print_full_prompt(continue_prompt, tokenizer)
-                generated = llm.generate(
-                    prompt=continue_prompt, sampling_params=sampling_params
-                )
-                continuation = generated["text"]
-                stitched = join_open_think(probe) + continuation
-                reasoning_text, content = reasoning_parser.parse_non_stream(
-                    stitched
-                )
-                output = (content or "").strip()
-                new_reasoning = new_reasoning_from_continuation(continuation)
-
-                log_banner("RAW MODEL CONTINUATION")
-                print(continuation if continuation else "(empty)", flush=True)
-                log_banner("THINKING")
-                print(
-                    (reasoning_text or "").strip() or "(empty)",
-                    flush=True,
-                )
-                log_banner("OUTPUT")
-                print(output if output else "(empty)", flush=True)
-
-                record = {
-                    "index": idx,
-                    "behavior_id": row.get("behavior_id", ""),
-                    "category": row.get("category", ""),
-                    "prompt": row["prompt"],
-                    "probe": probe,
-                    "skipped": False,
-                    "new_reasoning": new_reasoning.strip(),
-                    "new_reasoning_tokens": count_tokens(tokenizer, new_reasoning),
-                    "reasoning": (reasoning_text or "").strip(),
-                    "output": output,
-                    "k0_output": k0_by_index.get(idx, ""),
-                    "raw_text": stitched,
-                    "generated_text": continuation,
-                    "input_prompt": continue_prompt,
-                }
-                out_f.write(json.dumps(record, ensure_ascii=False) + "\n")
-                out_f.flush()
-                n_run += 1
+            else:
                 print(
                     f"[{idx}] {row.get('behavior_id', '')} hijack reasoning done",
                     flush=True,
@@ -270,7 +304,7 @@ def main() -> None:
     finally:
         llm.shutdown()
 
-    print(f"\nWrote {n_run} generations, skipped {n_skip} -> {output_path}")
+    print(f"\nWrote {n_run} generations -> {output_path}")
     print(
         "Classify with:\n"
         f"  python scripts/harmbench/standard/qwen3-4b/classify.py --input {output_path}"
