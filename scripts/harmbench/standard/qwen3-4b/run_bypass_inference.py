@@ -11,8 +11,8 @@ Output JSONL keeps original_reasoning, bypass_reasoning, new_reasoning
 (model continuation in thinking), full reasoning, and output.
 
 Resume: rows already in --output with a non-empty "output" field are skipped.
-Rows missing from --output, or present with an empty/missing "output" value,
-are (re)run. --limit applies to those pending rows only.
+Rows missing from --output, or present with an empty "output", are run
+again. --limit applies to those pending rows, with empty-output rows first.
 
 Reads outputs/harmbench/standard/qwen3-4b/bypass_reasoning_deepseekv3-03.jsonl.
 Writes outputs/harmbench/standard/qwen3-4b/bypass_reasoning_deepseekv3-03_infer.jsonl.
@@ -165,7 +165,8 @@ def main() -> None:
             f"{sorted(empty_output)}"
         )
 
-    candidates: list[dict] = []
+    retries: list[dict] = []
+    fresh: list[dict] = []
     n_skip = 0
     for row in records:
         idx = row["index"]
@@ -181,20 +182,24 @@ def main() -> None:
             print(f"[{idx}] skip: empty bypass_reasoning", flush=True)
             n_skip += 1
             continue
+        item = {
+            "row": row,
+            "bypass_raw": bypass_raw,
+            "bypass": bypass,
+            "original_reasoning": original_reasoning,
+            "retry_empty_output": idx in empty_output,
+        }
         if idx in empty_output:
             print(
                 f"[{idx}] re-run: row exists in output but output is empty",
                 flush=True,
             )
-        candidates.append(
-            {
-                "row": row,
-                "bypass_raw": bypass_raw,
-                "bypass": bypass,
-                "original_reasoning": original_reasoning,
-            }
-        )
+            retries.append(item)
+        else:
+            fresh.append(item)
 
+    # Empty-output retries first so --limit fills those before new indices.
+    candidates = retries + fresh
     if args.limit is not None:
         candidates = candidates[: min(args.limit, len(candidates))]
 
@@ -242,8 +247,9 @@ def main() -> None:
             continue_prompt = item["continue_prompt"]
             idx = row["index"]
 
+            kind = "re-run empty output" if item.get("retry_empty_output") else "generate"
             print(
-                f"\n[{idx}] sending the prompt below to the model ...",
+                f"\n[{idx}] {kind}; sending the prompt below to the model ...",
                 flush=True,
             )
             print_full_prompt(continue_prompt, tokenizer)
@@ -287,7 +293,14 @@ def main() -> None:
             print(new_reasoning or "(empty)", flush=True)
             log_banner("OUTPUT")
             print(output or "(empty)", flush=True)
-            print(f"[{idx}] {row.get('behavior_id', '')} done", flush=True)
+            if not output:
+                print(
+                    f"[{idx}] {row.get('behavior_id', '')} still has empty output "
+                    "(will retry on the next run)",
+                    flush=True,
+                )
+            else:
+                print(f"[{idx}] {row.get('behavior_id', '')} done", flush=True)
     finally:
         llm.shutdown()
 
