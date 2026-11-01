@@ -66,7 +66,7 @@ def parse_args() -> argparse.Namespace:
         default="bypass_reasoning",
         help="JSONL field for the prefix text (e.g. bypass_reasoning_ne)",
     )
-    parser.add_argument("--max-new-tokens", type=int, default=8048)
+    parser.add_argument("--max-new-tokens", type=int, default=12048)
     parser.add_argument(
         "--limit",
         type=int,
