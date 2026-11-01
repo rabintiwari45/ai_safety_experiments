@@ -26,9 +26,8 @@ BYPASS_INFER_CLASSIFIED = (
     QWEN3_4B_DIR / "bypass_reasoning_deepseekv3-03_infer_classified.jsonl"
 )
 BYPASS_OUTPUT_PREFIX_INFER = (
-    QWEN3_4B_DIR / "bypass_reasoning_deepseekv3-03_infer_no_think_bypass_output.jsonl"
+    QWEN3_4B_DIR / "bypass_reasoning_deepseekv3-03_no_think_infer.jsonl"
 )
 BYPASS_OUTPUT_PREFIX_CLASSIFIED = (
-    QWEN3_4B_DIR
-    / "bypass_reasoning_deepseekv3-03_infer_no_think_bypass_output_classified.jsonl"
+    QWEN3_4B_DIR / "bypass_reasoning_deepseekv3-03_no_think_infer_classified.jsonl"
 )

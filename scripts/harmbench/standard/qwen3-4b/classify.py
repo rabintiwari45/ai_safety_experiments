@@ -10,7 +10,7 @@ Usage (from ai_safety_experiments/):
     python scripts/harmbench/standard/qwen3-4b/classify.py
     python scripts/harmbench/standard/qwen3-4b/classify.py --input outputs/harmbench/standard/qwen3-4b/probes_reasoning.jsonl
     python scripts/harmbench/standard/qwen3-4b/classify.py \\
-        --input outputs/harmbench/standard/qwen3-4b/bypass_reasoning_deepseekv3-03_infer_no_think_bypass_output.jsonl \\
+        --input outputs/harmbench/standard/qwen3-4b/bypass_reasoning_deepseekv3-03_no_think_infer.jsonl \\
         --key new_output_suffix
 """
 

@@ -8,7 +8,12 @@ empty closed think block, then prefills augmented bypass_reasoning as plain
 assistant text. The model continues the visible answer (non-reasoning path).
 
 Reads outputs/harmbench/standard/qwen3-4b/bypass_reasoning_deepseekv3-03.jsonl.
-Writes outputs/harmbench/standard/qwen3-4b/bypass_reasoning_deepseekv3-03_infer_no_think_bypass_output.jsonl.
+Writes outputs/harmbench/standard/qwen3-4b/bypass_reasoning_deepseekv3-03_no_think_infer.jsonl.
+
+Resume: a row is skipped only when new_output_suffix is non-empty.
+Rows missing from the output, or present with an empty new_output_suffix,
+are run again. --limit applies to those pending rows, with empty-suffix
+rows first.
 
 Usage (from ai_safety_experiments/):
     python scripts/harmbench/standard/qwen3-4b/run_bypass_inference_output_prefix.py --dry-run --limit 1
@@ -67,8 +72,13 @@ def parse_args() -> argparse.Namespace:
         default="bypass_reasoning",
         help="JSONL field for the prefix text (e.g. bypass_reasoning_ne)",
     )
-    parser.add_argument("--max-new-tokens", type=int, default=4048)
-    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--max-new-tokens", type=int, default=10048)
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Max pending rows to run (missing or empty new_output_suffix), not the first N input rows",
+    )
     parser.add_argument(
         "--no-augment",
         action="store_true",
@@ -149,8 +159,6 @@ def main() -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     records = load_records(input_path)
-    if args.limit is not None:
-        records = records[: min(args.limit, len(records))]
 
     k0_by_index: dict[int, str] = {}
     baseline_path = Path(args.baseline)
@@ -161,16 +169,18 @@ def main() -> None:
     print(f"Loading tokenizer from {args.model_path} ...")
     tokenizer = AutoTokenizer.from_pretrained(args.model_path)
 
-    completed, empty_output = load_infer_resume_state(output_path)
+    completed, empty_suffix = load_infer_resume_state(
+        output_path, "new_output_suffix"
+    )
     if completed:
         print(
-            f"Resume: skipping {len(completed)} index(es) with non-empty output "
-            f"in {output_path}"
+            f"Resume: skipping {len(completed)} index(es) with non-empty "
+            f"new_output_suffix in {output_path}"
         )
-    if empty_output:
+    if empty_suffix:
         print(
-            f"Resume: will re-run {len(empty_output)} index(es) with empty output: "
-            f"{sorted(empty_output)}"
+            f"Resume: will re-run {len(empty_suffix)} index(es) with empty "
+            f"new_output_suffix: {sorted(empty_suffix)}"
         )
 
     print(
@@ -179,7 +189,8 @@ def main() -> None:
         flush=True,
     )
 
-    pending: list[dict] = []
+    retries: list[dict] = []
+    fresh: list[dict] = []
     n_skip = 0
     for row in records:
         idx = row["index"]
@@ -189,13 +200,12 @@ def main() -> None:
         user_prompt = (row.get("prompt") or "").strip()
 
         if idx in completed:
-            print(f"[{idx}] skip: non-empty output already in {output_path}", flush=True)
-            continue
-        if idx in empty_output:
             print(
-                f"[{idx}] re-run: row exists in output but output is empty",
+                f"[{idx}] skip: non-empty new_output_suffix already in {output_path}",
                 flush=True,
             )
+            n_skip += 1
+            continue
         if not user_prompt:
             print(f"[{idx}] skip: empty prompt", flush=True)
             n_skip += 1
@@ -204,31 +214,48 @@ def main() -> None:
             print(f"[{idx}] skip: empty {args.bypass_field}", flush=True)
             n_skip += 1
             continue
+        item = {
+            "row": row,
+            "user_prompt": user_prompt,
+            "bypass_raw": bypass_raw,
+            "bypass": bypass,
+            "original_reasoning": original_reasoning,
+            "retry_empty_suffix": idx in empty_suffix,
+        }
+        if idx in empty_suffix:
+            print(
+                f"[{idx}] re-run: row exists but new_output_suffix is empty",
+                flush=True,
+            )
+            retries.append(item)
+        else:
+            fresh.append(item)
 
-        continue_prompt = build_output_prefix_prompt(tokenizer, user_prompt, bypass)
+    # Empty-suffix retries first so --limit fills those before new indices.
+    candidates = retries + fresh
+    if args.limit is not None:
+        candidates = candidates[: min(args.limit, len(candidates))]
+
+    pending: list[dict] = []
+    for item in candidates:
+        row = item["row"]
+        idx = row["index"]
+        continue_prompt = build_output_prefix_prompt(
+            tokenizer, item["user_prompt"], item["bypass"]
+        )
         print(
             f"\n[{idx}] {row.get('behavior_id', '')}  preparing model input",
             flush=True,
         )
         if not args.print_prompt_only:
             log_banner("USER PROMPT")
-            print(user_prompt, flush=True)
+            print(item["user_prompt"], flush=True)
             log_banner(f"BYPASS PREFIX ({args.bypass_field}, raw)")
-            print(bypass_raw, flush=True)
+            print(item["bypass_raw"], flush=True)
             log_banner("BYPASS PREFIX (assistant output, after augment)")
-            print(bypass, flush=True)
+            print(item["bypass"], flush=True)
         print_full_prompt(continue_prompt, tokenizer)
-
-        pending.append(
-            {
-                "row": row,
-                "user_prompt": user_prompt,
-                "bypass_raw": bypass_raw,
-                "bypass": bypass,
-                "original_reasoning": original_reasoning,
-                "continue_prompt": continue_prompt,
-            }
-        )
+        pending.append({**item, "continue_prompt": continue_prompt})
 
     if args.dry_run:
         label = "Print-prompt" if args.print_prompt else "Dry-run"
@@ -261,8 +288,13 @@ def main() -> None:
             continue_prompt = item["continue_prompt"]
             idx = row["index"]
 
+            kind = (
+                "re-run empty new_output_suffix"
+                if item.get("retry_empty_suffix")
+                else "generate"
+            )
             print(
-                f"\n[{idx}] sending the prompt below to the model ...",
+                f"\n[{idx}] {kind}; sending the prompt below to the model ...",
                 flush=True,
             )
             print_full_prompt(continue_prompt, tokenizer)
@@ -315,7 +347,14 @@ def main() -> None:
             print(new_output_suffix or "(empty)", flush=True)
             log_banner("FULL OUTPUT (prefix + continuation)")
             print(output or "(empty)", flush=True)
-            print(f"[{idx}] {row.get('behavior_id', '')} done", flush=True)
+            if not new_output_suffix:
+                print(
+                    f"[{idx}] {row.get('behavior_id', '')} still has empty "
+                    "new_output_suffix (will retry on the next run)",
+                    flush=True,
+                )
+            else:
+                print(f"[{idx}] {row.get('behavior_id', '')} done", flush=True)
     finally:
         llm.shutdown()
 
