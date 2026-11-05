@@ -30,6 +30,12 @@ BYPASS_OUTPUT_PREFIX_INFER = (
 BYPASS_OUTPUT_PREFIX_CLASSIFIED = (
     GEMMA4_DIR / "bypass_reasoning_deepseekv3-03_output_prefix_infer_classified.jsonl"
 )
+BYPASS_CLOSED_THINK_INFER = (
+    GEMMA4_DIR / "bypass_reasoning_deepseekv3-03_closed_think_infer.jsonl"
+)
+BYPASS_CLOSED_THINK_CLASSIFIED = (
+    GEMMA4_DIR / "bypass_reasoning_deepseekv3-03_closed_think_infer_classified.jsonl"
+)
 
 # Gemma 4 sampling from the model card.
 GEMMA_SAMPLING_PARAMS = {
@@ -62,6 +68,21 @@ def join_open_thought(prefix: str) -> str:
     ends at `<|turn>model` and does not open `<|channel>thought` by itself.
     """
     return THOUGHT_OPEN + prefix.rstrip()
+
+
+def join_closed_thought(prefix: str) -> str:
+    """Bypass inside a finished thought channel. Generation starts after `<channel|>`."""
+    return f"{THOUGHT_OPEN}{prefix.rstrip()}\n{THOUGHT_CLOSE}"
+
+
+def split_closed_thought(continuation: str) -> tuple[str, str]:
+    """Answer starts immediately. Extra text before a new `<channel|>` is reasoning."""
+    close = continuation.find(THOUGHT_CLOSE)
+    if close == -1:
+        return "", continuation.strip()
+    extra = continuation[:close].strip()
+    answer = continuation[close + len(THOUGHT_CLOSE) :].strip()
+    return extra, answer
 
 
 def split_thought(continuation: str) -> tuple[str, str]:
