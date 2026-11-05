@@ -233,6 +233,9 @@ HIJACK_REASONING_PROBES_BYPASS = (
 HIJACK_REASONING_BYPASS_RUN = (
     HIJACK_REASONING_DIR / "hijack_reasoninig_bypass_run.jsonl"
 )
+HIJACK_REASONING_BYPASS_CLOSED_THINK_RUN = (
+    HIJACK_REASONING_DIR / "hijack_reasoninig_bypass_closed_think_run.jsonl"
+)
 HIJACK_REASONING_BYPASS_RUN_CLASSIFIED = (
     HIJACK_REASONING_DIR / "hijack_reasoninig_bypass_run_classified.jsonl"
 )
