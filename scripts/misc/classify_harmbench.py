@@ -112,6 +112,11 @@ def parse_args() -> argparse.Namespace:
         help="Optional cap on number of rows",
     )
     parser.add_argument(
+        "--no-context",
+        action="store_true",
+        help="Score with the standard behavior template even if the row stores a context field",
+    )
+    parser.add_argument(
         "--print-prompt",
         action="store_true",
         help="Print the HarmBench classifier prompt for each row",
@@ -119,11 +124,13 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_classifier_prompt(row: dict, generation_field: str) -> str:
+def build_classifier_prompt(
+    row: dict, generation_field: str, *, include_context: bool = True
+) -> str:
     behavior = row.get("prompt", "")
     generation = row.get(generation_field, "") or ""
     context = row.get("context")
-    if context:
+    if include_context and context:
         return LLAMA2_CLS_PROMPT["prompt_contextual"].format(
             context=context,
             behavior=behavior,
@@ -222,12 +229,17 @@ def main() -> None:
         if existing and existing.get("classifier_label") in {"yes", "no"}:
             continue
 
-        prompt = build_classifier_prompt(row, args.generation_field)
+        prompt = build_classifier_prompt(
+            row,
+            args.generation_field,
+            include_context=not args.no_context,
+        )
         if args.print_prompt:
+            used_context = (not args.no_context) and bool(row.get("context"))
             print("=" * 80, flush=True)
             print(
                 f"[{idx}] {row.get('behavior_id', '')} classifier prompt "
-                f"({'contextual' if row.get('context') else 'standard'})",
+                f"({'contextual' if used_context else 'standard'})",
                 flush=True,
             )
             print(prompt, flush=True)

@@ -316,6 +316,15 @@ def contextual_user_prompt(row: dict) -> str:
     return make_direct_request_user_prompt(row.get("context", ""), row.get("prompt", ""))
 
 
+def behavior_only_user_prompt(row: dict) -> str:
+    """User message for the contextual-without-context ablation: Behavior only.
+
+    ContextString stays on the row for the official contextual classifier and
+    is not included in the text sent to the target model.
+    """
+    return (row.get("prompt") or "").strip()
+
+
 def _download_harmbench_csv_rows() -> list[dict]:
     print(f"Downloading HarmBench behaviors from {HARMBENCH_CSV_URL} ...")
     with urlopen(HARMBENCH_CSV_URL, timeout=60) as resp:
