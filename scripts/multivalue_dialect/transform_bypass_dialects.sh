@@ -24,7 +24,7 @@ if [[ $# -ge 1 ]]; then
 elif [[ -v LIMIT ]]; then
   LIMIT="${LIMIT}"
 else
-  LIMIT="1"
+  LIMIT="200"
 fi
 
 cd "${ROOT}"
