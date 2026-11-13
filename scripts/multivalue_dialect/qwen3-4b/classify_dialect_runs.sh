@@ -9,8 +9,10 @@
 # From ai_safety_experiments/:
 #   export OPENAI_API_KEY=...
 #   bash scripts/multivalue_dialect/qwen3-4b/classify_dialect_runs.sh
+#   LIMIT=200 bash scripts/multivalue_dialect/qwen3-4b/classify_dialect_runs.sh
 #
-# Rows that already have a yes/no label are skipped.
+# Default limit is 200 rows per file. Rows that already have a yes/no label
+# are skipped.
 
 set -euo pipefail
 
@@ -24,6 +26,7 @@ fi
 
 CLASSIFY="scripts/multivalue_dialect/qwen3-4b/classify.py"
 DIR="outputs/multivalue_dialect/harmbench/standard/qwen3-4b"
+LIMIT="${LIMIT:-200}"
 
 classify_file() {
   local input="$1"
@@ -36,7 +39,8 @@ classify_file() {
   python3 "${CLASSIFY}" \
     --input "${input}" \
     --output "${input%.jsonl}_classified.jsonl" \
-    --key "${key}"
+    --key "${key}" \
+    --limit "${LIMIT}"
 }
 
 classify_file "${DIR}/probes_dialects_reasoning_african_american.jsonl" output
