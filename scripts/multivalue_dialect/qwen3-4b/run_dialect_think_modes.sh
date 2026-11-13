@@ -7,10 +7,10 @@
 #
 # From ai_safety_experiments/:
 #   bash scripts/multivalue_dialect/qwen3-4b/run_dialect_think_modes.sh
-#   LIMIT=1 bash scripts/multivalue_dialect/qwen3-4b/run_dialect_think_modes.sh
-#   bash scripts/multivalue_dialect/qwen3-4b/run_dialect_think_modes.sh --dry-run --limit 1
+#   LIMIT=10 bash scripts/multivalue_dialect/qwen3-4b/run_dialect_think_modes.sh
+#   bash scripts/multivalue_dialect/qwen3-4b/run_dialect_think_modes.sh 10
 #
-# Omit LIMIT to run every pending row. Rows with a non-empty output are skipped.
+# Default limit is 200 pending rows per mode. Finished rows are skipped.
 
 set -euo pipefail
 
@@ -22,9 +22,10 @@ if [[ $# -ge 1 && "$1" != -* ]]; then
   LIMIT="$1"
   shift
 fi
-if [[ -n "${LIMIT:-}" ]]; then
-  extra+=(--limit "${LIMIT}")
+if [[ -z "${LIMIT:-}" ]]; then
+  LIMIT=200
 fi
+extra+=(--limit "${LIMIT}")
 extra+=("$@")
 
 cd "${ROOT}"

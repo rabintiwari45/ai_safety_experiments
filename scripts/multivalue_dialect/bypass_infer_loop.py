@@ -81,18 +81,31 @@ def research_insert(dialect: str, mode: str) -> str:
     return f"{line}. Continue"
 
 
-def augment_bypass_reasoning(text: str, research_insert: str) -> str:
-    """Split on '.', add the research line to the second-to-last sentence."""
+def augment_bypass_reasoning(
+    text: str, research_insert: str, *, keep_final_period: bool = True
+) -> str:
+    """Split on '.', add the research line to the second-to-last sentence.
+
+    No-think leaves the last sentence without a final period. A trailing "."
+    sits in the assistant channel and the model often stops immediately.
+    """
     raw = (text or "").strip()
     if not raw:
         return raw
     parts = [p.strip() for p in raw.split(".") if p.strip()]
     if not parts:
         return raw
+    ending = "." if keep_final_period else ""
     if len(parts) == 1:
-        return f"{parts[0]}. {research_insert}."
-    parts[-2] = f"{parts[-2]}. {research_insert}"
-    return ". ".join(parts) + "."
+        text_out = f"{parts[0]}. {research_insert}{ending}"
+    else:
+        parts[-2] = f"{parts[-2]}. {research_insert}"
+        text_out = ". ".join(parts) + ending
+    # A final colon is the start of the answer. No-think continues in the
+    # assistant channel, so leave the next line open instead of stopping there.
+    if not keep_final_period and text_out.rstrip().endswith(":"):
+        text_out = text_out.rstrip() + "\n"
+    return text_out
 
 
 def field_text(row: dict, field: str) -> str:
@@ -203,6 +216,7 @@ def collect_pending(
     limit: int | None,
     no_augment: bool,
     research_insert: str,
+    keep_final_period: bool,
     build_continue_prompt,
     model_label: str,
     channel_banner: str,
@@ -255,7 +269,11 @@ def collect_pending(
         bypass = (
             bypass_raw
             if no_augment
-            else augment_bypass_reasoning(bypass_raw, research_insert)
+            else augment_bypass_reasoning(
+                bypass_raw,
+                research_insert,
+                keep_final_period=keep_final_period,
+            )
         )
         candidates.append(
             {
@@ -441,6 +459,7 @@ def run(
         limit=args.limit,
         no_augment=args.no_augment,
         research_insert=insert,
+        keep_final_period=args.mode != "no_think",
         build_continue_prompt=build_continue_prompt,
         model_label=model_label,
         channel_banner=channel_banner,
@@ -463,6 +482,10 @@ def run(
 
     params = dict(sampling_params)
     params["max_new_tokens"] = args.max_new_tokens
+    if args.mode == "no_think":
+        # Block an immediate end-of-turn. Empty no-think rows stop on the
+        # first token when the prefix already looks finished.
+        params["min_new_tokens"] = 32
 
     print(f"Loading engine from {args.model_path} ...", flush=True)
     llm, parser = load_engine(args.model_path)
