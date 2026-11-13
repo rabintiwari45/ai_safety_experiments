@@ -48,7 +48,7 @@ MODE_SETTINGS = {
         "output_suffix": "_closed_think_infer.jsonl",
     },
     "no_think": {
-        "max_new_tokens": 4048,
+        "max_new_tokens": 12048,
         "record_mode": "bypass_output_prefix_empty_think",
         "enable_thinking": False,
         "output_suffix": "_no_think_infer.jsonl",
@@ -206,18 +206,23 @@ def collect_pending(
     build_continue_prompt,
     model_label: str,
     channel_banner: str,
+    resume_field: str,
 ) -> tuple[list[dict], int]:
-    completed, empty_output = load_infer_resume_state(output_path)
+    # No-think stores the prefilled bypass in "output", so an empty model
+    # continuation still looks finished there. Resume on new_output_suffix.
+    completed, empty_output = load_infer_resume_state(
+        output_path, output_field=resume_field
+    )
     if completed:
         print(
             f"[{dialect}] resume: skipping {len(completed)} index(es) "
-            f"with non-empty output in {output_path}",
+            f"with non-empty {resume_field} in {output_path}",
             flush=True,
         )
     if empty_output:
         print(
             f"[{dialect}] resume: will re-run {len(empty_output)} index(es) "
-            f"with empty output: {sorted(empty_output)}",
+            f"with empty {resume_field}: {sorted(empty_output)}",
             flush=True,
         )
 
@@ -229,7 +234,7 @@ def collect_pending(
         bypass_raw = field_text(row, bypass_field)
         if idx in completed:
             print(
-                f"[{dialect} {idx}] skip: non-empty output already in {output_path}",
+                f"[{dialect} {idx}] skip: non-empty {resume_field} already in {output_path}",
                 flush=True,
             )
             n_skip += 1
@@ -244,7 +249,7 @@ def collect_pending(
             continue
         if idx in empty_output:
             print(
-                f"[{dialect} {idx}] re-run: row exists in output but output is empty",
+                f"[{dialect} {idx}] re-run: row exists but {resume_field} is empty",
                 flush=True,
             )
         bypass = (
@@ -439,6 +444,9 @@ def run(
         build_continue_prompt=build_continue_prompt,
         model_label=model_label,
         channel_banner=channel_banner,
+        resume_field=(
+            "new_output_suffix" if args.mode == "no_think" else "output"
+        ),
     )
 
     if args.dry_run:
