@@ -2,6 +2,8 @@
 Run Qwen3-4B from the Nepali HarmBench prompt and probe.
 
 The Nepali probe is prefilled inside an open <think> tag. </think> is not closed.
+If the text starts repeating, generation is cut off and that row is kept,
+repeated text included. It is not generated again.
 
 Reads outputs/harmbench/standard_nepali/qwen3-8b/probes_nepali.jsonl.
 Writes outputs/harmbench/standard_nepali/qwen3-4b/probes_reasoning.jsonl.
@@ -58,6 +60,7 @@ def main() -> None:
         parser_name="qwen3",
         full_prompt_title="QWEN3-4B",
         think_banner="NEPALI PROBE IN <think> (</think> not closed)",
+        stop_on_repetition=True,
     )
 
 

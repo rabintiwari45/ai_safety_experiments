@@ -18,3 +18,11 @@ NEPALI_PROBES = STANDARD_NEPALI_DIR / "qwen3-8b" / "probes_nepali.jsonl"
 
 def probe_infer_path(model: str) -> Path:
     return STANDARD_NEPALI_DIR / model / "probes_reasoning.jsonl"
+
+
+def nepali_reasoning_path(model: str) -> Path:
+    return STANDARD_NEPALI_DIR / model / "probes_nepali_reasoning.jsonl"
+
+
+def nepali_bypass_path(model: str) -> Path:
+    return STANDARD_NEPALI_DIR / model / "bypass_reasoning_deepseekv3-03.jsonl"

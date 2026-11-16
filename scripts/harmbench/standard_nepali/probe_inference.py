@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 from transformers import AutoTokenizer
@@ -40,6 +41,38 @@ def new_reasoning_from_continuation(continuation: str) -> str:
     if close == -1:
         return continuation
     return continuation[:close]
+
+
+def repeated_region(text: str) -> tuple[int, int] | None:
+    """Return (start, unit_length) when the tail is the same span copied many times.
+
+    A hit means the model is stuck repeating one phrase. The caller keeps one
+    copy and stops that generation.
+    """
+    min_unit = 8
+    max_unit = 240
+    min_repeats = 4
+    min_covered = 160
+    n = len(text)
+    if n < min_covered:
+        return None
+    upper = min(max_unit, n // min_repeats)
+    for length in range(min_unit, upper + 1):
+        for slack in range(length):
+            end = n - slack
+            if end < length * min_repeats:
+                break
+            unit = text[end - length : end]
+            if len(set(unit)) < 3:
+                continue
+            reps = 1
+            pos = end - length
+            while pos >= length and text[pos - length : pos] == unit:
+                reps += 1
+                pos -= length
+            if reps >= min_repeats and reps * length >= min_covered:
+                return pos, length
+    return None
 
 
 def qwen_parse(continuation: str, probe: str, reasoning_parser) -> dict:
@@ -77,6 +110,58 @@ def print_full_prompt(continue_prompt: str, tokenizer, title: str) -> None:
     )
     print(f"{'=' * 12} END FULL PROMPT {'=' * 12}", flush=True)
     print(f"prompt tail repr: {continue_prompt[-80:]!r}", flush=True)
+
+
+def generate_continuation(
+    llm,
+    prompt: str,
+    sampling_params: dict,
+    *,
+    stop_on_repetition: bool,
+) -> tuple[str, bool]:
+    """Generate one continuation. Abort once the tail is the same span repeated."""
+    if not stop_on_repetition:
+        generated = llm.generate(prompt=prompt, sampling_params=sampling_params)
+        return generated["text"], False
+    return _stream_until_repeat(llm, prompt, sampling_params)
+
+
+def _stream_until_repeat(
+    llm, prompt: str, sampling_params: dict
+) -> tuple[str, bool]:
+    rid = f"nepali-repeat-{time.time_ns()}"
+    stream = llm.generate(
+        prompt=prompt,
+        sampling_params=sampling_params,
+        stream=True,
+        rid=rid,
+    )
+    text = ""
+    stopped = False
+    try:
+        for chunk in stream:
+            chunk_text = chunk.get("text")
+            if chunk_text:
+                # Non-incremental streaming sends the full text so far.
+                # A shorter chunk that does not extend it is a delta.
+                if not text or chunk_text.startswith(text):
+                    text = chunk_text
+                else:
+                    text += chunk_text
+            if stopped or repeated_region(text) is None:
+                continue
+            stopped = True
+            print(
+                "Repetition detected; cutting off this row and keeping the text.",
+                flush=True,
+            )
+            llm.tokenizer_manager.abort_request(rid)
+    finally:
+        stream.close()
+
+    # Keep the repeated span that was already produced. Further tokens are
+    # not generated, and the caller does not run the row again.
+    return text, stopped
 
 
 def build_parser(
@@ -119,6 +204,7 @@ def run_probe_inference(
     parser_name: str | None,
     full_prompt_title: str,
     think_banner: str,
+    stop_on_repetition: bool = False,
 ) -> None:
     args = build_parser(
         description=description,
@@ -146,10 +232,20 @@ def run_probe_inference(
     tokenizer = AutoTokenizer.from_pretrained(args.model_path)
 
     completed, empty_output = load_infer_resume_state(output_path)
+    if stop_on_repetition and output_path.exists():
+        # A cut-off repeat is finished. Do not generate that row again, even
+        # when it has no answer.
+        for saved in load_records(output_path):
+            if not saved.get("repetition_stopped"):
+                continue
+            idx = saved.get("index")
+            if idx is None:
+                continue
+            completed.add(int(idx))
+            empty_output.discard(int(idx))
     if completed:
         print(
-            f"Resume: skipping {len(completed)} index(es) with non-empty output "
-            f"in {output_path}"
+            f"Resume: skipping {len(completed)} finished index(es) in {output_path}"
         )
     if empty_output:
         print(
@@ -164,7 +260,7 @@ def run_probe_inference(
         probe = probe_text(row)
         if idx in completed:
             print(
-                f"[{idx}] skip: non-empty output already in {output_path}",
+                f"[{idx}] skip: already saved in {output_path}",
                 flush=True,
             )
             continue
@@ -233,10 +329,12 @@ def run_probe_inference(
                 flush=True,
             )
             print_full_prompt(continue_prompt, tokenizer, full_prompt_title)
-            generated = llm.generate(
-                prompt=continue_prompt, sampling_params=sampling_params
+            continuation, repetition_stopped = generate_continuation(
+                llm,
+                continue_prompt,
+                sampling_params,
+                stop_on_repetition=stop_on_repetition,
             )
-            continuation = generated["text"]
             parsed = parse_generation(continuation, probe, reasoning_parser)
             output = (parsed.get("output") or "").strip()
 
@@ -268,10 +366,17 @@ def run_probe_inference(
                 "raw_text": parsed.get("raw_text") or "",
                 "generated_text": parsed.get("generated_text") or continuation,
                 "input_prompt": continue_prompt,
+                "repetition_stopped": repetition_stopped,
             }
             upsert_jsonl_row(output_path, record)
             n_run += 1
-            if not output:
+            if repetition_stopped:
+                print(
+                    f"[{idx}] {row.get('behavior_id', '')} cut off and kept "
+                    "with the repeated text; it will not be generated again",
+                    flush=True,
+                )
+            elif not output:
                 print(
                     f"[{idx}] {row.get('behavior_id', '')} still has empty output "
                     "(will retry on the next run)",
