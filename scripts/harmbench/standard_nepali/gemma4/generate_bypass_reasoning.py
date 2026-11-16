@@ -2,7 +2,7 @@
 Rewrite Gemma 4 Nepali new_reasoning into Nepali bypass reasoning.
 
 Reads probes_nepali_reasoning.jsonl and writes
-bypass_reasoning_deepseekv3-03.jsonl. The source prompt, probe, and
+bypass_nepali_reasoning_deepseekv3_03.jsonl. The source prompt, probe, and
 new_reasoning are Nepali. The rewritten trace is Nepali as well.
 
 Usage (from ai_safety_experiments/):

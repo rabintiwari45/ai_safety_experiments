@@ -25,4 +25,15 @@ def nepali_reasoning_path(model: str) -> Path:
 
 
 def nepali_bypass_path(model: str) -> Path:
-    return STANDARD_NEPALI_DIR / model / "bypass_reasoning_deepseekv3-03.jsonl"
+    return STANDARD_NEPALI_DIR / model / "bypass_nepali_reasoning_deepseekv3_03.jsonl"
+
+
+def nepali_bypass_infer_path(model: str, mode: str) -> Path:
+    suffix = {
+        "open_think": "_infer.jsonl",
+        "closed_think": "_closed_think_infer.jsonl",
+        "no_think": "_no_think_infer.jsonl",
+    }[mode]
+    return nepali_bypass_path(model).with_name(
+        f"bypass_nepali_reasoning_deepseekv3_03{suffix}"
+    )
