@@ -368,7 +368,7 @@ def run(
     model_label: str,
     channel_banner: str,
     record_mode: str | None = None,
-    stop_on_repetition: bool = True,
+    stop_on_repetition: bool = False,
 ) -> None:
     from transformers import AutoTokenizer
 

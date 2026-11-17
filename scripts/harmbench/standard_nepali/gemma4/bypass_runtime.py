@@ -137,5 +137,5 @@ def main_for(mode: str) -> None:
         model_label=MODEL_LABEL,
         channel_banner=channel_banner,
         record_mode=record_mode,
-        stop_on_repetition=True,
+        stop_on_repetition=False,
     )

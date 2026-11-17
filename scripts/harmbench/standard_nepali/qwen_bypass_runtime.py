@@ -182,5 +182,5 @@ def main_for(mode: str, model_key: str) -> None:
         model_label=spec["label"],
         channel_banner=channel_banner,
         record_mode=record_mode,
-        stop_on_repetition=True,
+        stop_on_repetition=False,
     )
