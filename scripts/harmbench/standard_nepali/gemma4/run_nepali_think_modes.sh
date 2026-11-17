@@ -20,7 +20,7 @@ if [[ $# -ge 1 && "$1" != -* ]]; then
   shift
 fi
 if [[ -z "${LIMIT:-}" ]]; then
-  LIMIT=1
+  LIMIT=200
 fi
 
 cd "${ROOT}"
@@ -28,9 +28,10 @@ export HF_HOME="${HF_HOME:-/workspace/.hf_home}"
 export HF_HUB_DISABLE_XET=1
 
 scripts=(
+  run_bypass_inference.py
   run_bypass_inference_closed_think.py
   run_bypass_inference_output_prefix.py
-  run_bypass_inference.py
+  
 )
 
 for script in "${scripts[@]}"; do
