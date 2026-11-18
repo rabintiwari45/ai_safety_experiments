@@ -183,5 +183,5 @@ def main_for(mode: str, model_key: str) -> None:
         channel_banner=channel_banner,
         record_mode=record_mode,
         # Off for now. The per-token scan runs on the CPU and stalls decode.
-        stop_on_repetition=False,
+        stop_on_repetition=True,
     )
