@@ -20,7 +20,7 @@ if [[ $# -ge 1 && "$1" != -* ]]; then
   shift
 fi
 if [[ -z "${LIMIT:-}" ]]; then
-  LIMIT=1
+  LIMIT=200
 fi
 
 cd "${ROOT}"
