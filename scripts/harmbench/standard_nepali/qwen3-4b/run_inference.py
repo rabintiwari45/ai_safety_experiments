@@ -56,7 +56,11 @@ def main() -> None:
         default_max_new_tokens=12048,
         build_continue_prompt=build_continue_prompt,
         parse_generation=qwen_parse,
-        engine_kwargs={"reasoning_parser": "qwen3", "mem_fraction_static": 0.85},
+        engine_kwargs={
+            "reasoning_parser": "qwen3",
+            "mem_fraction_static": 0.85,
+            "enable_custom_logit_processor": True,
+        },
         parser_name="qwen3",
         full_prompt_title="QWEN3-4B",
         think_banner="NEPALI PROBE IN <think> (</think> not closed)",

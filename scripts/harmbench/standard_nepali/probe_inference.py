@@ -348,13 +348,6 @@ def run_probe_inference(
     tokenizer = AutoTokenizer.from_pretrained(args.model_path)
 
     completed, empty_output = load_infer_resume_state(output_path)
-    if output_path.exists():
-        for row in load_records(output_path):
-            idx = row.get("index")
-            if idx is None or not row.get("repetition_stopped"):
-                continue
-            completed.add(int(idx))
-            empty_output.discard(int(idx))
     if completed:
         print(
             f"Resume: skipping {len(completed)} index(es) with non-empty output "
